@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import pytest
+from pydantic import ValidationError
+
 from haven.agents.policies import (
     can_execute_without_confirmation,
     plan_status_for_steps,
@@ -82,6 +85,19 @@ def test_validate_rejects_unconfirmed_high_impact() -> None:
 def test_validate_rejects_empty_plan() -> None:
     plan = _plan([], status=PlanStatus.PROPOSED, confirm=False)
     assert not validate_plan_policy(plan).valid
+
+
+def test_invalid_risk_value_is_rejected_by_the_plan_model() -> None:
+    with pytest.raises(ValidationError):
+        PlanStep(
+            id="x",
+            order=1,
+            action="unlock_everything",
+            title="t",
+            description="d",
+            risk="UNLOCK_EVERYTHING",  # type: ignore[arg-type]
+            requires_confirmation=False,
+        )
 
 
 def test_validate_requires_awaiting_status_for_high_impact() -> None:

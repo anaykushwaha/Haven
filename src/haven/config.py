@@ -34,7 +34,6 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
-
 # ---------------------------------------------------------------------------
 # Planner backends
 # ---------------------------------------------------------------------------
@@ -108,21 +107,13 @@ class HavenConfig:
         object.__setattr__(
             self,
             "persistence_backend",
-            normalize_persistence_backend(
-                self.persistence_backend
-            ),
+            normalize_persistence_backend(self.persistence_backend),
         )
 
         if self.max_plan_steps < 1:
-            raise ValueError(
-                f"{ENV_MAX_PLAN_STEPS} must be a positive integer"
-            )
+            raise ValueError(f"{ENV_MAX_PLAN_STEPS} must be a positive integer")
 
-        normalized_log_level = (
-            self.log_level.strip().upper()
-            if self.log_level
-            else "INFO"
-        )
+        normalized_log_level = self.log_level.strip().upper() if self.log_level else "INFO"
 
         object.__setattr__(
             self,
@@ -146,14 +137,9 @@ def normalize_backend(value: str) -> str:
     backend = (value or "").strip().lower()
 
     if backend not in SUPPORTED_PLANNER_BACKENDS:
-        supported = ", ".join(
-            sorted(SUPPORTED_PLANNER_BACKENDS)
-        )
+        supported = ", ".join(sorted(SUPPORTED_PLANNER_BACKENDS))
 
-        raise ValueError(
-            f"unsupported planner backend {value!r}; "
-            f"expected one of: {supported}"
-        )
+        raise ValueError(f"unsupported planner backend {value!r}; expected one of: {supported}")
 
     return backend
 
@@ -170,14 +156,9 @@ def normalize_persistence_backend(
     backend = (value or "").strip().lower()
 
     if backend not in SUPPORTED_PERSISTENCE_BACKENDS:
-        supported = ", ".join(
-            sorted(SUPPORTED_PERSISTENCE_BACKENDS)
-        )
+        supported = ", ".join(sorted(SUPPORTED_PERSISTENCE_BACKENDS))
 
-        raise ValueError(
-            f"unsupported persistence backend {value!r}; "
-            f"expected one of: {supported}"
-        )
+        raise ValueError(f"unsupported persistence backend {value!r}; expected one of: {supported}")
 
     return backend
 
@@ -218,14 +199,10 @@ def get_config() -> HavenConfig:
 
     if raw_max_steps:
         try:
-            max_plan_steps = int(
-                raw_max_steps
-            )
+            max_plan_steps = int(raw_max_steps)
 
         except ValueError as exc:
-            raise ValueError(
-                f"{ENV_MAX_PLAN_STEPS} must be an integer"
-            ) from exc
+            raise ValueError(f"{ENV_MAX_PLAN_STEPS} must be an integer") from exc
 
     else:
         max_plan_steps = 12

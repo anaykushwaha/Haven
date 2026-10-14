@@ -1,0 +1,8 @@
+[
+  {
+    "name": "dev",
+    "description": "Haven hackathon account, us-west-2 (Bedrock + DynamoDB + Cognito live here)",
+    "account": "110144245769",
+    "region": "us-west-2"
+  }
+]

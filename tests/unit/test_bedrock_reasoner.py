@@ -203,8 +203,9 @@ def test_no_candidates_skips_model_and_requests_clarification(
 
     ctx = movie_night_context.model_copy(update={"available_minutes": 10})
     reasoner = BedrockReasoner(invoke_model=must_not_be_called)
-    with pytest.raises(ValueError, match="available time"):
-        create_plan("Get movie night ready", ctx, reasoner=reasoner)
+    plan = create_plan("Get movie night ready", ctx, reasoner=reasoner)
+    assert plan.clarification_needed and plan.steps == []
+    assert plan.clarification_prompt and "available time" in plan.clarification_prompt
 
 
 # --- Provider error handling -------------------------------------------------- #
@@ -255,6 +256,116 @@ def test_provider_errors_are_wrapped_with_category(movie_night_context: Househol
 def test_wrap_provider_error_categories(exc: Exception, category: str) -> None:
     wrapped = wrap_provider_error(exc)
     assert wrapped.category == category
+
+
+class ReadTimeoutError(Exception):
+    pass
+
+
+class EndpointConnectionError(Exception):
+    pass
+
+
+class ModelThrottledException(Exception):
+    pass
+
+
+class ContextWindowOverflowException(Exception):
+    pass
+
+
+@pytest.mark.parametrize(
+    ("exc", "category"),
+    [
+        # timeouts
+        (ReadTimeoutError("read timed out"), "timeout"),
+        (TimeoutError("timed out"), "timeout"),
+        (_FakeClientError("ModelTimeoutException", "model timed out"), "timeout"),
+        # no auth / expired session
+        (_FakeClientError("ExpiredTokenException", "token expired"), "credentials"),
+        (_FakeClientError("UnrecognizedClientException", "bad token"), "credentials"),
+        # access denied / account restriction (message preserved separately)
+        (_FakeClientError("AccessDeniedException", "not authorized to invoke"), "access_denied"),
+        # model unavailable / not found
+        (_FakeClientError("ServiceUnavailableException", "try later"), "unavailable"),
+        (_FakeClientError("ModelNotReadyException", "warming up"), "unavailable"),
+        (_FakeClientError("ResourceNotFoundException", "no such model"), "model_not_found"),
+        # throttling
+        (ModelThrottledException("slow down"), "throttled"),
+        (_FakeClientError("ServiceQuotaExceededException", "quota"), "throttled"),
+        # network / prompt
+        (EndpointConnectionError("no route"), "network"),
+        (ContextWindowOverflowException("too big"), "prompt_too_large"),
+    ],
+)
+def test_failure_matrix_categories(exc: Exception, category: str) -> None:
+    wrapped = wrap_provider_error(exc)
+    assert wrapped.category == category
+    assert str(wrapped).startswith(f"[{category}]")
+
+
+def test_account_restriction_message_is_preserved_without_credentials() -> None:
+    exc = _FakeClientError(
+        "AccessDeniedException",
+        "Your account is not authorized to invoke this model until verification completes.",
+    )
+    wrapped = wrap_provider_error(exc)
+    assert wrapped.category == "access_denied"
+    assert "verification" in str(wrapped)
+    assert "AKIA" not in str(wrapped)
+
+
+def test_wrapping_is_idempotent() -> None:
+    original = ModelInvocationError("timeout", "x")
+    assert wrap_provider_error(original) is original
+
+
+@pytest.mark.parametrize("returned", [None, {"summary": "dict, not model"}, "text"])
+def test_empty_or_untyped_decision_is_a_provider_failure(
+    movie_night_context: HouseholdContext, returned: object
+) -> None:
+    reasoner = BedrockReasoner(invoke_model=lambda s, p: returned)  # type: ignore[arg-type,return-value]
+    with pytest.raises(ModelInvocationError) as info:
+        create_plan("Get movie night ready", movie_night_context, reasoner=reasoner)
+    assert info.value.category == "structured_output"
+
+
+def test_unexpected_exception_is_chained(movie_night_context: HouseholdContext) -> None:
+    class Weird(Exception):
+        pass
+
+    def failing(system_prompt: str, prompt: str) -> ModelPlanDecision:
+        raise Weird("something odd")
+
+    with pytest.raises(ModelInvocationError) as info:
+        create_plan(
+            "Get movie night ready",
+            movie_night_context,
+            reasoner=BedrockReasoner(invoke_model=failing),
+        )
+    assert info.value.category == "provider"
+    assert isinstance(info.value.__cause__, Weird)
+
+
+def test_model_cannot_downgrade_risk_or_remove_confirmation(
+    movie_night_context: HouseholdContext,
+) -> None:
+    """Leaving home offers HIGH_IMPACT candidates; the model only orders them."""
+
+    goal = "We're leaving the house"
+    candidates = generate_candidates(goal, movie_night_context)
+    offered = offer_candidates(candidates)
+    lock_id = next(cid for cid, c in offered.items() if c.action == "lock_door")
+    decision = _decision(summary="Lock first", selected_candidate_ids=[lock_id])
+    plan = create_plan(
+        goal, movie_night_context, reasoner=BedrockReasoner(invoke_model=lambda s, p: decision)
+    )
+
+    assert [s.action for s in plan.steps] == ["lock_door"]
+    assert plan.steps[0].risk is ActionRisk.HIGH_IMPACT_ACTION
+    assert plan.steps[0].requires_confirmation is True
+    assert plan.requires_confirmation and plan.status is PlanStatus.AWAITING_CONFIRMATION
+    assert validate_plan_policy(plan).valid
 
 
 def test_no_silent_fallback_to_mock(movie_night_context: HouseholdContext) -> None:

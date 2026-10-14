@@ -1,0 +1,37 @@
+# Keep the AgentCore container build context small and secret-free.
+.git
+.venv
+venv
+env
+**/__pycache__
+**/*.py[cod]
+.pytest_cache
+.ruff_cache
+.mypy_cache
+*.egg-info
+build
+dist
+htmlcov
+.coverage*
+
+# Secrets and local overrides never enter the image.
+.env
+.env.*
+**/.env
+**/.env.*
+*.pem
+*.key
+
+# Node / dashboard / CDK tooling is not part of the Python runtime.
+**/node_modules
+apps
+aws/agentcore/HavenRuntime
+
+# Developer-only material.
+tests
+scripts
+docs
+.github
+.vscode
+.idea
+*.md

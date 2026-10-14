@@ -14,7 +14,6 @@ from aws.dynamodb.config import (
     load_dynamodb_config,
 )
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -114,10 +113,7 @@ def ensure_tables(
 
     resolved = config or load_dynamodb_config()
 
-    resource = (
-        dynamodb
-        or create_dynamodb_resource(resolved)
-    )
+    resource = dynamodb or create_dynamodb_resource(resolved)
 
     for definition in table_definitions(resolved):
         table = resource.Table(definition.name)
@@ -137,9 +133,7 @@ def ensure_tables(
         table = resource.create_table(
             TableName=definition.name,
             KeySchema=list(definition.key_schema),
-            AttributeDefinitions=list(
-                definition.attribute_definitions
-            ),
+            AttributeDefinitions=list(definition.attribute_definitions),
             BillingMode="PAY_PER_REQUEST",
         )
 
@@ -152,15 +146,9 @@ def ensure_tables(
         )
 
     return HavenTables(
-        preferences=resource.Table(
-            resolved.preferences_table
-        ),
-        activities=resource.Table(
-            resolved.activities_table
-        ),
-        plans=resource.Table(
-            resolved.plans_table
-        ),
+        preferences=resource.Table(resolved.preferences_table),
+        activities=resource.Table(resolved.activities_table),
+        plans=resource.Table(resolved.plans_table),
     )
 
 
@@ -173,21 +161,12 @@ def get_tables(
 
     resolved = config or load_dynamodb_config()
 
-    resource = (
-        dynamodb
-        or create_dynamodb_resource(resolved)
-    )
+    resource = dynamodb or create_dynamodb_resource(resolved)
 
     return HavenTables(
-        preferences=resource.Table(
-            resolved.preferences_table
-        ),
-        activities=resource.Table(
-            resolved.activities_table
-        ),
-        plans=resource.Table(
-            resolved.plans_table
-        ),
+        preferences=resource.Table(resolved.preferences_table),
+        activities=resource.Table(resolved.activities_table),
+        plans=resource.Table(resolved.plans_table),
     )
 
 
@@ -196,11 +175,7 @@ def _table_exists(table: Any) -> bool:
         table.load()
 
     except ClientError as exc:
-        code = (
-            exc.response
-            .get("Error", {})
-            .get("Code")
-        )
+        code = exc.response.get("Error", {}).get("Code")
 
         if code == "ResourceNotFoundException":
             return False

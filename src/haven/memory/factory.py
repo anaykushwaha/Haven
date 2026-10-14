@@ -18,48 +18,24 @@ def create_memory_service(
 ) -> MemoryService:
     """Create MemoryService using the selected persistence backend."""
 
-    resolved = (
-        config
-        or get_config()
-    )
+    resolved = config or get_config()
 
-    if (
-        resolved.persistence_backend
-        == MEMORY_PERSISTENCE_BACKEND
-    ):
-        return MemoryService(
-            default_household_id=(
-                default_household_id
-            )
-        )
+    if resolved.persistence_backend == MEMORY_PERSISTENCE_BACKEND:
+        return MemoryService(default_household_id=(default_household_id))
 
-    if (
-        resolved.persistence_backend
-        == DYNAMODB_PERSISTENCE_BACKEND
-    ):
+    if resolved.persistence_backend == DYNAMODB_PERSISTENCE_BACKEND:
         # Lazy import intentionally keeps
         # local mode independent of AWS.
         from aws.dynamodb.repositories import (
             create_dynamodb_repositories,
         )
 
-        repositories = (
-            create_dynamodb_repositories()
-        )
+        repositories = create_dynamodb_repositories()
 
         return MemoryService(
-            preferences=(
-                repositories.preferences
-            ),
-            activity=(
-                repositories.activity
-            ),
-            default_household_id=(
-                default_household_id
-            ),
+            preferences=(repositories.preferences),
+            activity=(repositories.activity),
+            default_household_id=(default_household_id),
         )
 
-    raise ValueError(
-        "unsupported persistence backend "
-        f"{resolved.persistence_backend!r}"
-    )
+    raise ValueError(f"unsupported persistence backend {resolved.persistence_backend!r}")

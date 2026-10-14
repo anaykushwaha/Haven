@@ -1,0 +1,47 @@
+# Person A owns test CI. Offline only: no AWS credentials, Cognito, AgentCore,
+# Bedrock or DynamoDB are required. Live cloud tests stay opt-in via
+# `pytest -m aws_live` and are not run here.
+
+name: test
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Haven
+        run: python -m pip install --upgrade pip && pip install -e ".[dev]"
+
+      - name: Import smoke check
+        run: |
+          python -c "import haven"
+          python -c "from haven.mcp.server import create_server"
+          python -c "from aws.dynamodb.repositories import create_dynamodb_repositories"
+          python -c "from aws.agentcore.runtime import build_server"
+
+      - name: Ruff
+        run: ruff check src aws tests scripts
+
+      - name: Pytest (offline)
+        run: pytest
+        env:
+          HAVEN_PLANNER_BACKEND: mock
+          HAVEN_PERSISTENCE_BACKEND: memory

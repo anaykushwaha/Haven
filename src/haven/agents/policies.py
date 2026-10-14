@@ -60,7 +60,15 @@ def validate_plan_policy(plan: Plan) -> PolicyValidationResult:
 
     issues: list[PolicyIssue] = []
 
-    if not plan.steps:
+    if plan.clarification_needed:
+        # A clarification plan asks a question instead of proposing actions.
+        if plan.steps:
+            issues.append(PolicyIssue(message="clarification plan must not contain steps"))
+        if not (plan.clarification_prompt or "").strip():
+            issues.append(PolicyIssue(message="clarification plan must carry a prompt"))
+        if plan.requires_confirmation or plan.status is not PlanStatus.PROPOSED:
+            issues.append(PolicyIssue(message="clarification plan cannot require confirmation"))
+    elif not plan.steps:
         issues.append(PolicyIssue(message="plan contains no steps"))
 
     plan_needs_confirmation = False

@@ -25,6 +25,7 @@ from haven.memory.activity import (
     ActivityType,
     InMemoryActivityStore,
 )
+from haven.memory.errors import PersistenceError
 from haven.memory.preferences import (
     InMemoryPreferenceStore,
     Preference,
@@ -33,6 +34,7 @@ from haven.memory.preferences import (
     is_durable_preference_key,
 )
 from haven.models.plan import Plan
+from haven.planning.workflows import classify_workflow
 
 logger = logging.getLogger(__name__)
 
@@ -83,7 +85,7 @@ class MemoryService:
             person_id=_optional(person_id),
         )
         saved = self._preferences.save(preference)
-        self.record_activity(
+        self._audit(
             household_id,
             ActivityType.PREFERENCE_CHANGED,
             f"Preference '{key}' updated",
@@ -112,13 +114,37 @@ class MemoryService:
         key = _require(key, "key").lower()
         deleted = self._preferences.delete(household_id, key, _optional(person_id))
         if deleted:
-            self.record_activity(
+            self._audit(
                 household_id,
                 ActivityType.PREFERENCE_DELETED,
                 f"Preference '{key}' deleted",
                 details={"key": key},
             )
         return deleted
+
+    def _audit(
+        self,
+        household_id: str,
+        activity_type: ActivityType,
+        summary: str,
+        *,
+        details: dict[str, ActivityDetailValue],
+    ) -> None:
+        """Record an audit entry for a change that has already been persisted.
+
+        The durable change is the source of truth; if only the audit write
+        fails the caller still gets a truthful success and the failure is
+        logged (category only, no payload) instead of being hidden.
+        """
+
+        try:
+            self.record_activity(household_id, activity_type, summary, details=details)
+        except PersistenceError as exc:
+            logger.warning(
+                "Audit record for %s was not written: category=%s",
+                activity_type.value,
+                exc.category,
+            )
 
     # -- Activity ---------------------------------------------------------- #
 
@@ -130,23 +156,45 @@ class MemoryService:
         *,
         details: dict[str, ActivityDetailValue] | None = None,
     ) -> ActivityRecord:
+        """Append an activity record.
+
+        ``details`` must be small scalar facts about the event. Keys that
+        describe temporary household state (presence, occupancy, door/lock
+        state, ...) are rejected so history can never become a surveillance
+        log, regardless of which store backs the service.
+        """
+
+        safe_details = dict(details or {})
+        transient = sorted(k for k in safe_details if not is_durable_preference_key(k))
+        if transient:
+            raise ValueError(
+                f"activity details {transient} describe temporary state and cannot be stored"
+            )
         record = ActivityRecord(
             household_id=_require(household_id, "household_id"),
             activity_type=activity_type,
             summary=_require(summary, "summary"),
-            details=dict(details or {}),
+            details=safe_details,
         )
         return self._activity.record(record)
 
-    def record_plan_proposed(self, household_id: str, plan: Plan) -> ActivityRecord:
-        """Remember that a plan was proposed. Stores plan metadata, not context."""
+    def record_plan_proposed(self, household_id: str, plan: Plan) -> ActivityRecord | None:
+        """Remember that a plan was proposed. Stores plan metadata, not context.
 
+        Clarification plans (a question, no steps) are not history and are
+        not recorded; ``None`` is returned for them.
+        """
+
+        if plan.clarification_needed:
+            logger.info("Not recording clarification plan %s in history", plan.id)
+            return None
         return self.record_activity(
             household_id,
             ActivityType.PLAN_PROPOSED,
             f"Proposed plan for: {plan.goal}",
             details={
                 "plan_id": plan.id,
+                "workflow": classify_workflow(plan.goal).value,
                 "step_count": len(plan.steps),
                 "requires_confirmation": plan.requires_confirmation,
             },

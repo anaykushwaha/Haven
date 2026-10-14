@@ -5,38 +5,50 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "haven"
 version = "0.1.0"
-description = "Haven — Alexa+ household planning agent"
+description = "Haven household agent"
+# 3.11+: the codebase uses datetime.UTC and enum.StrEnum.
 requires-python = ">=3.11"
-authors = [
-    { name = "Haven Team" }
-]
+
 dependencies = [
     "pydantic>=2.7",
     "boto3[crt]",
     "strands-agents",
-    "mcp",
+    "mcp>=1.28,<2",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0",
+    "pytest-anyio>=0.0",
+    "httpx>=0.27",
     "ruff>=0.6",
 ]
 
-# Two importable top-level packages:
-#   haven  (src/haven)  - application code
-#   aws    (aws/)       - AWS infrastructure: Bedrock config/client
+# Three importable top-level packages:
+#   haven      (src/haven)   - application code
+#   aws        (aws/)        - AWS infrastructure: Bedrock, DynamoDB, AgentCore
+#   simulator  (simulator/)  - local household/media simulators + demo data
 [tool.setuptools.packages.find]
 where = ["src", "."]
-include = ["haven*", "aws*"]
+include = ["haven*", "aws*", "simulator*"]
 
 [tool.setuptools.package-data]
 haven = ["py.typed"]
+# The simulators load their demo fixtures relative to their own module, so the
+# JSON must ship with a non-editable install (the AgentCore container build).
+"simulator.household" = ["data/*.json"]
+"simulator.media" = ["data/*.json"]
+"simulator.security" = ["data/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src", "."]
-addopts = "-q"
+# Offline by default. Live AWS tests are opt-in: `pytest -m aws_live`.
+addopts = "-q -m 'not aws_live'"
+markers = [
+    "integration: exercises the AgentCore/AWS deployment contract (offline unless aws_live)",
+    "aws_live: requires live AWS credentials, a deployed AgentCore runtime and a JWT (opt-in)",
+]
 
 [tool.ruff]
 line-length = 100

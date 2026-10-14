@@ -7,10 +7,11 @@ from pathlib import Path
 
 import pytest
 
-from haven.agents.planner import candidate_to_step, create_plan
+from haven.agents.planner import assemble_plan, candidate_to_step, create_plan, generate_candidates
+from haven.agents.policies import validate_plan_policy
 from haven.agents.prompts import PLANNER_SYSTEM_PROMPT, build_planning_prompt
 from haven.config import HavenConfig
-from haven.models.context import HouseholdContext
+from haven.models.context import DeviceCapability, DeviceContext, HouseholdContext
 from haven.models.plan import ActionRisk, Plan, PlanStatus, PlanStep
 from haven.planning.models import ReasonedPlan
 from haven.planning.plan_service import create_household_plan
@@ -53,23 +54,30 @@ def test_movie_night_without_lights_omits_dim_step(movie_night_context: Househol
     assert [s.action for s in plan.steps] == ["select_media", "prepare_media_session"]
 
 
-def test_no_media_device_raises(movie_night_context: HouseholdContext) -> None:
+def _assert_clarification(plan: Plan, match: str) -> None:
+    assert plan.clarification_needed is True
+    assert plan.steps == []
+    assert plan.status is PlanStatus.PROPOSED
+    assert not plan.requires_confirmation
+    assert plan.clarification_prompt and match in plan.clarification_prompt
+
+
+def test_no_media_device_asks_for_clarification(movie_night_context: HouseholdContext) -> None:
     ctx = movie_night_context.model_copy(
         update={"devices": [d for d in movie_night_context.devices if d.id != "tv-1"]}
     )
-    with pytest.raises(ValueError, match="media playback device"):
-        create_plan("Get movie night ready", ctx)
+    _assert_clarification(create_plan("Get movie night ready", ctx), "media playback device")
 
 
-def test_no_fitting_media_raises(movie_night_context: HouseholdContext) -> None:
+def test_no_fitting_media_asks_for_clarification(movie_night_context: HouseholdContext) -> None:
     ctx = movie_night_context.model_copy(update={"available_minutes": 30})
-    with pytest.raises(ValueError, match="available time"):
-        create_plan("Get movie night ready", ctx)
+    _assert_clarification(create_plan("Get movie night ready", ctx), "available time")
 
 
-def test_unknown_goal_raises(movie_night_context: HouseholdContext) -> None:
-    with pytest.raises(ValueError):
-        create_plan("Launch the rocket", movie_night_context)
+def test_unknown_goal_asks_for_clarification(movie_night_context: HouseholdContext) -> None:
+    _assert_clarification(
+        create_plan("Launch the rocket", movie_night_context), "does not yet know how to plan"
+    )
 
 
 @pytest.mark.parametrize("goal", ["", "   "])
@@ -101,7 +109,7 @@ _FORBIDDEN_MODULES = ("boto3", "botocore", "strands", "ask_sdk_core")
 
 
 def _run_isolated(code: str) -> subprocess.CompletedProcess[str]:
-    root = Path(__file__).resolve().parents[1]
+    root = Path(__file__).resolve().parents[2]
     env = {**os.environ, "PYTHONPATH": os.pathsep.join([str(root / "src"), str(root)])}
     env.pop("HAVEN_PLANNER_BACKEND", None)
     return subprocess.run(
@@ -192,6 +200,167 @@ def test_plan_service_uses_configured_backend(movie_night_context: HouseholdCont
     config = HavenConfig(planner_backend="mock")
     plan = create_household_plan("Get movie night ready", movie_night_context, config=config)
     assert plan.steps
+
+
+# --- Leaving home (planner support only; execution tests belong to Person B) --- #
+
+
+def _security_context(movie_night_context: HouseholdContext) -> HouseholdContext:
+    alarm = DeviceContext(
+        id="alarm-1", name="Alarm Panel", room_id=None, capabilities=[DeviceCapability.SECURITY]
+    )
+    thermostat = DeviceContext(
+        id="thermo-1",
+        name="Hall Thermostat",
+        room_id="living-room",
+        capabilities=[DeviceCapability.THERMOSTAT],
+    )
+    return movie_night_context.model_copy(
+        update={"devices": [*movie_night_context.devices, alarm, thermostat]}
+    )
+
+
+def test_leaving_home_plan_is_conservative(movie_night_context: HouseholdContext) -> None:
+    plan = create_plan("We're leaving the house", movie_night_context)
+
+    assert [s.action for s in plan.steps] == ["turn_off_lights", "stop_media", "lock_door"]
+    assert plan.status is PlanStatus.AWAITING_CONFIRMATION
+    assert plan.requires_confirmation
+    lock = plan.steps[-1]
+    assert lock.risk is ActionRisk.HIGH_IMPACT_ACTION and lock.requires_confirmation
+    assert lock.device_id == "lock-1"
+    assert all(not s.requires_confirmation for s in plan.steps[:-1])
+    assert validate_plan_policy(plan).valid
+
+
+def test_leaving_home_never_assumes_a_security_system(
+    movie_night_context: HouseholdContext,
+) -> None:
+    plan = create_plan("Heading out, lock up", movie_night_context)
+    assert all(s.action != "arm_security_system" for s in plan.steps)
+    assert all(s.capability != DeviceCapability.SECURITY for s in plan.steps)
+
+
+def test_leaving_home_arms_security_only_when_present_and_with_confirmation(
+    movie_night_context: HouseholdContext,
+) -> None:
+    plan = create_plan("We're leaving the house", _security_context(movie_night_context))
+
+    actions = [s.action for s in plan.steps]
+    assert actions == [
+        "turn_off_lights",
+        "stop_media",
+        "set_away_temperature",
+        "lock_door",
+        "arm_security_system",
+    ]
+    arm = plan.steps[-1]
+    assert arm.risk is ActionRisk.HIGH_IMPACT_ACTION and arm.requires_confirmation
+    assert arm.device_id == "alarm-1"
+    # Someone is still marked present: the step says so, but presence is not persisted.
+    assert "appear to be home" in arm.description
+    assert plan.status is PlanStatus.AWAITING_CONFIRMATION
+
+
+def test_leaving_home_without_devices_asks(movie_night_context: HouseholdContext) -> None:
+    plan = create_plan(
+        "We're leaving the house", movie_night_context.model_copy(update={"devices": []})
+    )
+    _assert_clarification(plan, "leaving")
+
+
+def test_leaving_home_skips_unavailable_devices(movie_night_context: HouseholdContext) -> None:
+    devices = [
+        d.model_copy(update={"is_available": False}) if d.id == "lock-1" else d
+        for d in movie_night_context.devices
+    ]
+    plan = create_plan(
+        "We're leaving the house", movie_night_context.model_copy(update={"devices": devices})
+    )
+    assert [s.action for s in plan.steps] == ["turn_off_lights", "stop_media"]
+    assert plan.status is PlanStatus.PROPOSED and not plan.requires_confirmation
+
+
+def test_high_impact_candidates_survive_constraints_unchanged(
+    movie_night_context: HouseholdContext,
+) -> None:
+    from haven.planning.constraints import apply_constraints
+
+    goal = "We're leaving the house"
+    candidates = generate_candidates(goal, movie_night_context)
+    result = apply_constraints(goal, movie_night_context, candidates)
+    assert result.rejected == []
+    assert [c.risk for c in result.accepted if c.action == "lock_door"] == [
+        ActionRisk.HIGH_IMPACT_ACTION
+    ]
+
+
+# --- Plan assembly normalisation --------------------------------------------- #
+
+
+def _reasoned_with(step: PlanStep) -> ReasonedPlan:
+    return ReasonedPlan(summary="s", steps=[step])
+
+
+def test_assemble_plan_forces_confirmation_for_high_impact() -> None:
+    downgraded = PlanStep(
+        id="step-9",
+        order=7,
+        action="lock_door",
+        title="Lock",
+        description="d",
+        risk=ActionRisk.HIGH_IMPACT_ACTION,
+        requires_confirmation=False,  # a reasoner tried to remove confirmation
+    )
+    plan = assemble_plan("goal", _reasoned_with(downgraded))
+    assert plan.steps[0].requires_confirmation is True
+    assert plan.steps[0].order == 1
+    assert plan.status is PlanStatus.AWAITING_CONFIRMATION
+    assert plan.requires_confirmation
+    assert validate_plan_policy(plan).valid
+
+
+def test_assemble_plan_clears_spurious_confirmation_on_read_steps() -> None:
+    step = PlanStep(
+        id="step-1",
+        order=1,
+        action="select_media",
+        title="t",
+        description="d",
+        risk=ActionRisk.READ,
+        requires_confirmation=True,
+    )
+    plan = assemble_plan("goal", _reasoned_with(step))
+    assert plan.steps[0].requires_confirmation is False
+    assert plan.status is PlanStatus.PROPOSED
+
+
+def test_assemble_plan_rejects_no_steps_without_clarification() -> None:
+    with pytest.raises(ValueError, match="unable to produce"):
+        assemble_plan("goal", ReasonedPlan(summary="", steps=[]))
+
+
+def test_assemble_plan_clarification_without_prompt_gets_default() -> None:
+    plan = assemble_plan("goal", ReasonedPlan(summary="", steps=[], clarification_needed=True))
+    assert plan.clarification_needed and plan.clarification_prompt
+    assert plan.rejected_candidate_count == 0
+
+
+def test_plan_service_enforces_max_steps(movie_night_context: HouseholdContext) -> None:
+    config = HavenConfig(planner_backend="mock", max_plan_steps=2)
+    with pytest.raises(ValueError, match="limit is 2"):
+        create_household_plan("Get movie night ready", movie_night_context, config=config)
+
+
+def test_plan_service_returns_clarification_plan(movie_night_context: HouseholdContext) -> None:
+    ctx = movie_night_context.model_copy(update={"devices": []})
+    plan = create_household_plan("Get movie night ready", ctx, config=HavenConfig())
+    assert plan.clarification_needed and plan.steps == []
+
+
+def test_plan_ids_are_unique(movie_night_context: HouseholdContext) -> None:
+    ids = {create_plan("Get movie night ready", movie_night_context).id for _ in range(5)}
+    assert len(ids) == 5 and all(i.startswith("plan-") for i in ids)
 
 
 def test_candidate_prompt_lists_only_offered_candidates(

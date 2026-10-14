@@ -1,9 +1,9 @@
 """Haven durable memory: explicit preferences and activity history.
 
-Local/in-memory in Phase 2. Storage implementations are swappable via the
-`PreferenceStore` and `ActivityStore` protocols.
+Storage implementations are swappable via the `PreferenceStore` and
+`ActivityStore` protocols; `create_memory_service` picks the backend from
+``HAVEN_PERSISTENCE_BACKEND`` (``memory`` or ``dynamodb``).
 """
-from haven.memory.factory import create_memory_service
 
 from haven.memory.activity import (
     ActivityRecord,
@@ -11,6 +11,7 @@ from haven.memory.activity import (
     ActivityType,
     InMemoryActivityStore,
 )
+from haven.memory.factory import create_memory_service
 from haven.memory.preferences import (
     InMemoryPreferenceStore,
     Preference,
@@ -30,5 +31,6 @@ __all__ = [
     "Preference",
     "PreferenceKey",
     "PreferenceStore",
+    "create_memory_service",
     "is_durable_preference_key",
 ]

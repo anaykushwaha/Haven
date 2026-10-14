@@ -1,0 +1,74 @@
+{
+  "$schema": "https://schema.agentcore.aws.dev/v1/agentcore.json",
+  "name": "HavenRuntime",
+  "version": 1,
+  "managedBy": "CDK",
+  "tags": {
+    "agentcore:created-by": "agentcore-cli",
+    "agentcore:project-name": "HavenRuntime"
+  },
+  "runtimes": [
+    {
+      "name": "HavenMCP",
+      "description": "Haven household agent MCP server (planning via Bedrock, memory via DynamoDB)",
+      "build": "Container",
+      "dockerfile": "Dockerfile",
+      "entrypoint": "aws/agentcore/runtime.py",
+      "codeLocation": "../../..",
+      "networkMode": "PUBLIC",
+      "instrumentation": {
+        "enableOtel": false
+      },
+      "protocol": "MCP",
+      "requestHeaderAllowlist": [
+        "Authorization"
+      ],
+      "envVars": [
+        { "name": "AWS_REGION", "value": "us-west-2" },
+        { "name": "HAVEN_PLANNER_BACKEND", "value": "bedrock" },
+        { "name": "HAVEN_PERSISTENCE_BACKEND", "value": "dynamodb" },
+        { "name": "HAVEN_BEDROCK_MODEL_ID", "value": "global.anthropic.claude-sonnet-4-6" },
+        { "name": "HAVEN_BEDROCK_TEMPERATURE", "value": "0.2" },
+        { "name": "HAVEN_BEDROCK_MAX_TOKENS", "value": "2048" },
+        { "name": "HAVEN_DYNAMODB_PREFERENCES_TABLE", "value": "HavenPreferences" },
+        { "name": "HAVEN_DYNAMODB_ACTIVITIES_TABLE", "value": "HavenActivities" },
+        { "name": "HAVEN_DYNAMODB_PLANS_TABLE", "value": "HavenPlans" },
+        { "name": "HAVEN_MAX_PLAN_STEPS", "value": "12" },
+        { "name": "HAVEN_LOG_LEVEL", "value": "INFO" }
+      ],
+      "additionalPolicies": [
+        "aws/iam/policies/haven-bedrock-runtime.json",
+        "aws/iam/policies/haven-cloudwatch-logs-runtime.json",
+        "aws/iam/policies/haven-dynamodb-runtime.json"
+      ],
+      "authorizerType": "CUSTOM_JWT",
+      "authorizerConfiguration": {
+        "customJwtAuthorizer": {
+          "discoveryUrl": "https://cognito-idp.us-west-2.amazonaws.com/us-west-2_rc81kxXsN/.well-known/openid-configuration",
+          "allowedClients": [
+            "7u4n2us7e3if17i9325qakhisi"
+          ]
+        }
+      }
+    }
+  ],
+  "memories": [
+    {
+      "name": "HavenMCPMemory",
+      "eventExpiryDuration": 30,
+      "strategies": []
+    }
+  ],
+  "knowledgeBases": [],
+  "credentials": [],
+  "evaluators": [],
+  "onlineEvalConfigs": [],
+  "agentCoreGateways": [],
+  "policyEngines": [],
+  "configBundles": [],
+  "abTests": [],
+  "harnesses": [],
+  "datasets": [],
+  "capacityProviders": [],
+  "payments": []
+}

@@ -9,11 +9,11 @@ dependency-injected functions that don't import the `mcp` package at all
 (see the module docstrings there) — this file's `register(mcp)` calls are
 the only place those functions get wrapped as `@mcp.tool()`.
 
-Phase 3 runs Haven's own simulators and in-memory stores directly, the
-same way `scripts/run_movie_night.py` does; there is no AWS dependency
-here yet. Person A's DynamoDB-backed `MemoryService` (Phase 3) is a
-drop-in swap for the `MemoryService()` constructed below — nothing here
-needs to change when that lands, only `app_lifespan`'s construction.
+The server runs Haven's own simulators for household/media state. Durable
+memory comes from `haven.memory.factory.create_memory_service`, which picks
+in-memory or DynamoDB storage from ``HAVEN_PERSISTENCE_BACKEND``; the
+planner backend is likewise chosen by ``HAVEN_PLANNER_BACKEND``. With the
+defaults (``memory`` / ``mock``) nothing here touches AWS.
 """
 
 from __future__ import annotations
@@ -30,10 +30,10 @@ from haven.config import HavenConfig, get_config
 from haven.execution.results import ExecutionResult
 from haven.integrations.calendar import CalendarService, demo_calendar
 from haven.integrations.media import MediaService
+from haven.memory.factory import create_memory_service
 from haven.memory.service import MemoryService
 from haven.models.plan import Plan
 from haven.verification.verifier import VerificationResult
-
 from simulator.household.service import HouseholdSimulatorService
 from simulator.media.service import MediaSimulatorService
 
@@ -119,55 +119,95 @@ def get_app(ctx: Context) -> AppContext:
     return ctx.request_context.lifespan_context
 
 
-@asynccontextmanager
-async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
-    """Build Haven's runtime dependencies once per server process."""
+def build_app_context(config: HavenConfig | None = None) -> AppContext:
+    """Construct Haven's runtime dependencies for one server process."""
 
-    config = get_config()
+    config = config or get_config()
     logging.basicConfig(level=config.log_level, format="%(levelname)s %(name)s: %(message)s")
 
     household_service = HouseholdSimulatorService()
     household_id = household_service.get_snapshot().household_id
 
     media_service = MediaService(MediaSimulatorService())
-    memory_service = MemoryService(default_household_id=household_id)
+    # Backend chosen by HAVEN_PERSISTENCE_BACKEND (memory | dynamodb); the
+    # MemoryService API is identical either way.
+    memory_service = create_memory_service(config, default_household_id=household_id)
     calendar_service = demo_calendar()
 
-    logger.info("Haven MCP server starting for household_id=%s", household_id)
+    logger.info(
+        "Haven MCP server starting: household_id=%s planner_backend=%s persistence_backend=%s",
+        household_id,
+        config.planner_backend,
+        config.persistence_backend,
+    )
 
-    try:
-        yield AppContext(
-            household=household_service,
-            media=media_service,
-            memory=memory_service,
-            calendar=calendar_service,
-            plans=PlanStore(),
-            config=config,
-            household_id=household_id,
-        )
-    finally:
-        logger.info("Haven MCP server shutting down")
+    return AppContext(
+        household=household_service,
+        media=media_service,
+        memory=memory_service,
+        calendar=calendar_service,
+        plans=PlanStore(),
+        config=config,
+        household_id=household_id,
+    )
 
 
-def create_server(host: str | None = None, port: int | None = None) -> FastMCP:
-    """Build and fully wire the Haven MCP server. Does not start it —
-    call `.run(transport=...)` on the result (see `scripts/run_server.py`).
+# One AppContext per server process. In stateless Streamable HTTP mode (the
+# AgentCore Runtime contract) FastMCP re-enters the lifespan for *every*
+# request, so without this cache a plan proposed in one request would be
+# unknown to the next. Sharing the context keeps the in-process PlanStore
+# and simulators alive across requests of the same runtime instance; durable
+# state still belongs to MemoryService (DynamoDB in the cloud).
+_shared_app_context: AppContext | None = None
+
+
+def reset_app_context() -> None:
+    """Drop the process-wide AppContext (tests, or an explicit restart)."""
+
+    global _shared_app_context
+    _shared_app_context = None
+
+
+@asynccontextmanager
+async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
+    """Yield the process-wide AppContext, building it on first use."""
+
+    global _shared_app_context
+    if _shared_app_context is None:
+        _shared_app_context = build_app_context()
+    yield _shared_app_context
+
+
+def create_server(
+    host: str | None = None,
+    port: int | None = None,
+    *,
+    stateless_http: bool | None = None,
+) -> FastMCP:
+    """Build and fully wire the Haven MCP server.
+
+    ``stateless_http=True`` is what the AgentCore Runtime MCP contract expects
+    (see ``aws/agentcore/runtime.py``); local tooling can leave it unset.
     """
 
     kwargs: dict[str, object] = {}
+
     if host is not None:
         kwargs["host"] = host
+
     if port is not None:
         kwargs["port"] = port
 
-    mcp = FastMCP(SERVER_NAME, instructions=SERVER_INSTRUCTIONS, lifespan=app_lifespan, **kwargs)
+    if stateless_http is not None:
+        kwargs["stateless_http"] = stateless_http
 
-    # Deferred imports: these modules only need `create_server`/`get_app`
-    # *after* this function starts running, by which point this module's
-    # own top-level names (get_app, AppContext, ...) already exist. An
-    # eager, module-level import here would deadlock: importing
-    # `haven.mcp.tools.context` would re-enter this partially-initialized
-    # module before `get_app` was defined.
+    mcp = FastMCP(
+        SERVER_NAME,
+        instructions=SERVER_INSTRUCTIONS,
+        lifespan=app_lifespan,
+        **kwargs,
+    )
+
     from haven.mcp.tools import context as context_tool
     from haven.mcp.tools import execution as execution_tool
     from haven.mcp.tools import planning as planning_tool
@@ -189,5 +229,7 @@ __all__ = [
     "StoredPlan",
     "get_app",
     "app_lifespan",
+    "build_app_context",
+    "reset_app_context",
     "create_server",
 ]

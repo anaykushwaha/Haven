@@ -11,7 +11,13 @@ from __future__ import annotations
 import logging
 from collections.abc import Sequence
 
-from haven.models.context import DeviceContext, HouseholdContext, MediaItem
+from haven.models.context import (
+    DeviceContext,
+    HouseholdContext,
+    MediaItem,
+    PersonContext,
+    PresenceState,
+)
 from haven.planning.models import ActionCandidate, ConstraintResult, RejectedCandidate
 
 logger = logging.getLogger(__name__)
@@ -72,6 +78,45 @@ def context_has_capability(context: HouseholdContext, capability: str) -> bool:
     return any(
         device.is_available and capability in device.capabilities for device in context.devices
     )
+
+
+def people_present(context: HouseholdContext) -> list[PersonContext]:
+    """Return people whose presence is currently known to be PRESENT.
+
+    Presence is temporary context: it may shape *this* plan but must never be
+    written to memory (see `haven.memory.service.TRANSIENT_KEYS`).
+    """
+
+    return [person for person in context.people if person.presence is PresenceState.PRESENT]
+
+
+def presence_is_known(context: HouseholdContext) -> bool:
+    """Return True when at least one person has a known presence state."""
+
+    return any(person.presence is not PresenceState.UNKNOWN for person in context.people)
+
+
+def longest_fitting_option(
+    options: Sequence[MediaItem],
+    *,
+    available_minutes: int | None = None,
+) -> MediaItem | None:
+    """Return the longest available option that still fits the time, if any.
+
+    Used for evening suggestions, where filling the window well is the goal.
+    Ties keep catalogue order so the result is stable.
+    """
+
+    fitting = filter_available_options(options, available_minutes=available_minutes)
+    if not fitting:
+        return None
+    return max(fitting, key=lambda item: item.duration_minutes)
+
+
+def is_short_window(available_minutes: int | None, *, threshold_minutes: int = 30) -> bool:
+    """Return True when the known remaining time is too short for a feature."""
+
+    return available_minutes is not None and available_minutes < threshold_minutes
 
 
 def apply_constraints(

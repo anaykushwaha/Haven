@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from haven.models.context import HouseholdContext
 from haven.models.plan import ActionRisk, PlanStatus
 from haven.planning.models import OfferedCandidate
+from haven.planning.workflows import classify_workflow
 
 PLANNER_SYSTEM_PROMPT = """You are Haven, a household planning agent.
 
@@ -36,6 +37,17 @@ Planning rules:
 - Keep steps concrete, minimal, and understandable.
 - Distinguish planning from execution and verification. Never claim that
   a step has already been performed.
+
+Workflow guidance (the workflow is decided deterministically before you see
+the candidates; you choose among the candidates it produced):
+- movie_night: pick one title that fits the available time, prepare the
+  session on the chosen device, and dim lights only in that room.
+- leaving_home: comfort actions (lights, media, thermostat) may run on their
+  own. Locks and the security system are HIGH_IMPACT_ACTION and always need
+  confirmation; never assume a security system exists if none is offered.
+- tonight_planning: suggestions only. Every candidate is READ; recommend,
+  do not operate devices. Ask for clarification when the free time is
+  unknown rather than guessing.
 """
 
 CANDIDATE_SELECTION_RULES = """Decision rules:
@@ -112,10 +124,12 @@ def _candidate_selection_prompt(
 ) -> str:
     minimal = minimal_prompt_context(context, candidates)
     candidates_json = "[\n" + ",\n".join(c.model_dump_json(indent=2) for c in candidates) + "\n]"
+    workflow = classify_workflow(goal)
     return (
         "Plan the following household request by selecting among the offered candidate "
         "actions.\n\n"
         f"Goal:\n{goal}\n\n"
+        f"Workflow: {workflow.value}\n\n"
         "Relevant household context (JSON). Use only these facts:\n"
         f"{minimal.model_dump_json(indent=2)}\n\n"
         "Offered candidate actions (JSON). These already passed Haven's deterministic "

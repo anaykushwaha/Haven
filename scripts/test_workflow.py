@@ -4,8 +4,11 @@ Runs the planning path end to end without Alexa+, MCP, or execution.
 
 Usage:
     python scripts/test_workflow.py movie-night
-    python scripts/test_workflow.py movie-night --backend mock
-    python scripts/test_workflow.py movie-night --backend bedrock
+    python scripts/test_workflow.py leaving-home --backend mock
+    python scripts/test_workflow.py tonight --backend bedrock
+
+Exit codes: 0 plan proposed, 1 invalid input, 2 Bedrock failure,
+3 Haven needs clarification before it can plan.
 
 The demo HouseholdContext is built here explicitly so the harness does not
 depend on Person B's context resolver. Available time comes from the demo
@@ -43,6 +46,8 @@ from haven.planning.plan_service import create_household_plan
 
 SCENARIOS: dict[str, str] = {
     "movie-night": "Get movie night ready",
+    "leaving-home": "We're leaving the house, get it ready",
+    "tonight": "What should we do tonight?",
 }
 
 
@@ -96,6 +101,11 @@ def print_plan(plan: Plan, *, backend: str) -> None:
     print(f"Requires confirmation: {'yes' if plan.requires_confirmation else 'no'}")
     print(f"Candidates rejected by constraints: {plan.rejected_candidate_count}")
     print()
+    if plan.clarification_needed:
+        print(f"Haven asks: {plan.clarification_prompt}")
+        print()
+        print("No plan was proposed; Haven needs an answer first.")
+        return
     print("Steps:")
     for step in plan.steps:
         confirm = "confirmation required" if step.requires_confirmation else "no confirmation"
@@ -154,7 +164,7 @@ def run(scenario: str, backend: str | None) -> int:
     memory.record_plan_proposed(context.household_id, plan)
     history = memory.lookup_fact("history:plan_proposed")
     print(f"Memory: {len(history or [])} plan(s) recorded this session (in-memory only).")
-    return 0
+    return 0 if not plan.clarification_needed else 3
 
 
 def main(argv: Sequence[str] | None = None) -> int:

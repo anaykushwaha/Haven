@@ -106,6 +106,11 @@ class BedrockReasoner:
             logger.warning("Bedrock reasoning failed: category=%s", error.category)
             raise error from exc
 
+        if not isinstance(decision, ModelPlanDecision):
+            # An invoker that returns nothing (or the wrong type) is a provider
+            # failure, not a planning decision; it must never become a plan.
+            raise ModelInvocationError("structured_output", "model returned no decision")
+
         return decision_to_reasoned_plan(goal, decision, candidates_by_id(candidates))
 
     def _default_invoker(self) -> ModelInvoker:
@@ -234,11 +239,19 @@ _ERROR_CODE_CATEGORIES: dict[str, str] = {
     "ExpiredTokenException": "credentials",
     "ThrottlingException": "throttled",
     "TooManyRequestsException": "throttled",
+    "ServiceQuotaExceededException": "throttled",
     "ServiceUnavailableException": "unavailable",
+    "InternalServerException": "unavailable",
     "ModelNotReadyException": "unavailable",
+    "ModelErrorException": "provider",
+    "ModelStreamErrorException": "provider",
     "ResourceNotFoundException": "model_not_found",
     "ValidationException": "validation",
     "ModelTimeoutException": "timeout",
+    "RequestTimeout": "timeout",
+    "RequestTimeoutException": "timeout",
+    "ExpiredToken": "credentials",
+    "InvalidClientTokenId": "credentials",
 }
 
 _EXCEPTION_NAME_CATEGORIES: dict[str, str] = {
@@ -252,8 +265,11 @@ _EXCEPTION_NAME_CATEGORIES: dict[str, str] = {
     "LoginRefreshRequired": "credentials",
     "NoRegionError": "configuration",
     "EndpointConnectionError": "network",
+    "ConnectionClosedError": "network",
+    "ConnectionError": "network",
     "ConnectTimeoutError": "timeout",
     "ReadTimeoutError": "timeout",
+    "TimeoutError": "timeout",
     "ModelThrottledException": "throttled",
     "StructuredOutputException": "structured_output",
     "MaxTokensReachedException": "structured_output",

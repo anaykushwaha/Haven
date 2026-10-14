@@ -46,6 +46,18 @@ TRANSIENT_KEYS: frozenset[str] = frozenset(
         "tv_state",
         "security_armed",
         "people_home",
+        "occupancy",
+        "at_home",
+        "is_home",
+        "location",
+        "last_seen",
+        "arrived",
+        "left_home",
+        "window_open",
+        "window_state",
+        "alarm_state",
+        "context_snapshot",
+        "transcript",
     }
 )
 

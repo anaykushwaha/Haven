@@ -9,7 +9,6 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 
-
 DEFAULT_REGION = "us-west-2"
 
 DEFAULT_PREFERENCES_TABLE = "HavenPreferences"
@@ -57,8 +56,7 @@ class DynamoDBConfig:
 
             if not _TABLE_NAME_RE.fullmatch(value):
                 raise ValueError(
-                    f"{field_name} must be 3-255 characters using only "
-                    "letters, numbers, _, -, or ."
+                    f"{field_name} must be 3-255 characters using only letters, numbers, _, -, or ."
                 )
 
             object.__setattr__(self, field_name, value)
@@ -74,26 +72,13 @@ def load_dynamodb_config(
 
     env = os.environ if environ is None else environ
 
-    region = (
-        _text(env, ENV_REGION)
-        or _text(env, ENV_REGION_FALLBACK)
-        or DEFAULT_REGION
-    )
+    region = _text(env, ENV_REGION) or _text(env, ENV_REGION_FALLBACK) or DEFAULT_REGION
 
     return DynamoDBConfig(
         region=region,
-        preferences_table=(
-            _text(env, ENV_PREFERENCES_TABLE)
-            or DEFAULT_PREFERENCES_TABLE
-        ),
-        activities_table=(
-            _text(env, ENV_ACTIVITIES_TABLE)
-            or DEFAULT_ACTIVITIES_TABLE
-        ),
-        plans_table=(
-            _text(env, ENV_PLANS_TABLE)
-            or DEFAULT_PLANS_TABLE
-        ),
+        preferences_table=(_text(env, ENV_PREFERENCES_TABLE) or DEFAULT_PREFERENCES_TABLE),
+        activities_table=(_text(env, ENV_ACTIVITIES_TABLE) or DEFAULT_ACTIVITIES_TABLE),
+        plans_table=(_text(env, ENV_PLANS_TABLE) or DEFAULT_PLANS_TABLE),
         endpoint_url=_text(env, ENV_ENDPOINT_URL) or None,
     )
 
