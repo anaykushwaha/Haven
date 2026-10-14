@@ -1,0 +1,68 @@
+{
+  "tool": "get_plan_status",
+  "request": {
+    "title": "GetPlanStatusRequest",
+    "type": "object",
+    "properties": {
+      "plan_id": {
+        "type": "string",
+        "description": "A plan_id previously returned by propose_household_plan."
+      }
+    },
+    "required": [
+      "plan_id"
+    ],
+    "additionalProperties": false
+  },
+  "response": {
+    "title": "PlanStatusSummary",
+    "type": "object",
+    "properties": {
+      "plan_id": {
+        "type": "string"
+      },
+      "goal": {
+        "type": "string"
+      },
+      "plan_status": {
+        "type": "string"
+      },
+      "requires_confirmation": {
+        "type": "boolean"
+      },
+      "execution_status": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "verification_status": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "message": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "plan_id",
+      "goal",
+      "plan_status",
+      "requires_confirmation",
+      "execution_status",
+      "verification_status",
+      "message"
+    ],
+    "additionalProperties": false
+  }
+}

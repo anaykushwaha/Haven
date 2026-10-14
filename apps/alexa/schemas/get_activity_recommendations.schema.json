@@ -1,0 +1,77 @@
+{
+  "tool": "get_activity_recommendations",
+  "request": {
+    "title": "GetActivityRecommendationsRequest",
+    "type": "object",
+    "properties": {
+      "goal": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Optional goal to steer context resolution; defaults to a general tonight recommendation."
+      }
+    },
+    "additionalProperties": false
+  },
+  "response": {
+    "title": "RecommendationsResponse",
+    "type": "object",
+    "properties": {
+      "household_id": {
+        "type": "string"
+      },
+      "available_minutes": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "recommendations": {
+        "type": "array",
+        "items": {
+          "title": "RecommendationSummary",
+          "type": "object",
+          "properties": {
+            "media_id": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "duration_minutes": {
+              "type": "integer"
+            },
+            "reason": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "media_id",
+            "title",
+            "duration_minutes",
+            "reason"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "message": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "household_id",
+      "available_minutes",
+      "message"
+    ],
+    "additionalProperties": false
+  }
+}

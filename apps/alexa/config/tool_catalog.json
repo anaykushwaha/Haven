@@ -1,0 +1,74 @@
+{
+  "$comment": "Example utterances for mapping natural language to Haven's MCP tools in the Alexa+ console (or whatever surface lets you hint at phrasing — this wasn't confirmed against a live Alexa+ account; see docs/friction-log.md). The tool names and parameters below are authoritative, read from haven/mcp/schemas.py and haven/mcp/tools/*.py — the example_utterances are suggestions, not something the server enforces.",
+  "tools": [
+    {
+      "name": "get_household_context_tool",
+      "summary": "Resolve what Haven currently knows about the household for a goal.",
+      "parameters": ["goal"],
+      "example_utterances": [
+        "what's going on at home",
+        "what do you know about the house right now",
+        "check the house before movie night"
+      ],
+      "requires_confirmation": false
+    },
+    {
+      "name": "propose_household_plan_tool",
+      "summary": "Propose a structured, multi-step plan for a goal. Does not act on anything yet.",
+      "parameters": ["goal"],
+      "example_utterances": [
+        "get movie night ready",
+        "help me get ready for movie night",
+        "plan movie night for us"
+      ],
+      "requires_confirmation": false,
+      "returns": "A plan_id, used by get_plan_status_tool and execute_household_plan_tool."
+    },
+    {
+      "name": "get_plan_status_tool",
+      "summary": "Check a previously proposed plan's status, including execution/verification once run.",
+      "parameters": ["plan_id"],
+      "example_utterances": [
+        "what's the status of that plan",
+        "did movie night get set up",
+        "is it done yet"
+      ],
+      "requires_confirmation": false
+    },
+    {
+      "name": "execute_household_plan_tool",
+      "summary": "Execute a previously proposed plan and verify the result. Set confirmed=true only after the user has explicitly agreed to a plan containing a high-impact step.",
+      "parameters": ["plan_id", "confirmed"],
+      "example_utterances": [
+        "go ahead",
+        "do it",
+        "yes, confirm that",
+        "start movie night"
+      ],
+      "requires_confirmation": "conditional — only when the plan itself reports requires_confirmation=true; Haven, not Alexa+, decides this per plan"
+    },
+    {
+      "name": "save_household_preference_tool",
+      "summary": "Save a durable household (or person-scoped) preference. Rejects transient state like presence or device status.",
+      "parameters": ["key", "value", "person_id"],
+      "example_utterances": [
+        "we like sci-fi and comedy movies",
+        "remember that I don't like horror movies",
+        "set the living room as our usual movie room"
+      ],
+      "requires_confirmation": false,
+      "known_keys": ["preferred_genres", "preferred_room", "temperature_celsius", "preferred_media_device", "quiet_hours"]
+    },
+    {
+      "name": "get_activity_recommendations_tool",
+      "summary": "Suggest up to 3 things to watch tonight based on available time, saved genre preferences, and recent activity. Does not propose or execute a plan.",
+      "parameters": ["goal"],
+      "example_utterances": [
+        "what should we watch tonight",
+        "what should we do tonight",
+        "any movie recommendations"
+      ],
+      "requires_confirmation": false
+    }
+  ]
+}

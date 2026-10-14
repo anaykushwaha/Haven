@@ -1,0 +1,83 @@
+{
+  "tool": "propose_household_plan",
+  "request": {
+    "title": "ProposeHouseholdPlanRequest",
+    "type": "object",
+    "properties": {
+      "goal": {
+        "type": "string",
+        "description": "What the household is trying to do."
+      }
+    },
+    "required": [
+      "goal"
+    ],
+    "additionalProperties": false
+  },
+  "response": {
+    "title": "PlanSummary",
+    "type": "object",
+    "properties": {
+      "plan_id": {
+        "type": "string"
+      },
+      "goal": {
+        "type": "string"
+      },
+      "status": {
+        "type": "string"
+      },
+      "requires_confirmation": {
+        "type": "boolean"
+      },
+      "summary": {
+        "type": "string"
+      },
+      "steps": {
+        "type": "array",
+        "items": {
+          "title": "PlanStepSummary",
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "order": {
+              "type": "integer"
+            },
+            "title": {
+              "type": "string"
+            },
+            "description": {
+              "type": "string"
+            },
+            "risk": {
+              "type": "string"
+            },
+            "requires_confirmation": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "id",
+            "order",
+            "title",
+            "description",
+            "risk",
+            "requires_confirmation"
+          ],
+          "additionalProperties": false
+        }
+      }
+    },
+    "required": [
+      "plan_id",
+      "goal",
+      "status",
+      "requires_confirmation",
+      "summary",
+      "steps"
+    ],
+    "additionalProperties": false
+  }
+}

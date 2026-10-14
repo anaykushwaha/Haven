@@ -32,6 +32,118 @@ Copy the template below into a new section, dated, with your initials.
 
 ## Entries
 
+### [Phase 4] — apps/alexa/schemas/ generated with a local schema-export shim, not real pydantic (B)
+
+**Tool / API / SDK:** `pydantic` (`BaseModel.model_json_schema()`)
+
+**What we were trying to do:** Run `scripts/export_mcp_schemas.py` to
+generate `apps/alexa/schemas/*.schema.json` from the real
+`haven.mcp.schemas` pydantic models, so those files are accurate rather
+than hand-typed and liable to drift.
+
+**What happened:** No network access to install real `pydantic` here
+either, so the shipped `apps/alexa/schemas/*.schema.json` files were
+generated using a small local `model_json_schema()` implementation
+(added to the same test-only pydantic shim used since Phase 2). Field
+names, types, required/optional status, descriptions, and nesting are
+all read from the real `haven.mcp.schemas` models and should be
+accurate; the exact JSON Schema draft conventions (`$defs`/`$ref` for
+nested models vs. full inlining, exact `anyOf`/`default` phrasing) will
+likely look slightly different once regenerated with real pydantic.
+
+**What worked well:** Because `scripts/export_mcp_schemas.py` imports
+`haven.mcp.schemas` directly and calls `.model_json_schema()` rather than
+hand-duplicating field lists, the *content* (what's required, what types,
+what descriptions) doesn't depend on which pydantic generated it — only
+the exact on-disk JSON shape might shift slightly.
+
+**What didn't:** Nothing wrong, just unconfirmed cosmetic drift.
+
+**Workaround (if any):** None needed — this is what the script is for.
+
+**Would we use it again?** Yes. Run `python scripts/export_mcp_schemas.py`
+once real pydantic is installed (`pip install -e .`) and commit whatever
+changes — `python scripts/export_mcp_schemas.py --check` exits 1 if the
+checked-in files are stale, so this is easy to wire into CI later
+(Phase 6).
+
+### [Phase 4] — Alexa+ add-on manifest schema not confirmed against a live account (B)
+
+**Tool / API / SDK:** Alexa+ developer console / add-on tooling
+
+**What we were trying to do:** Produce `apps/alexa/config/addon.json` in
+whatever shape the Alexa+ console actually imports or expects for
+registering a custom MCP-backed add-on, plus store-listing content
+(name, description, example phrases, privacy links).
+
+**What happened:** No live Alexa+ developer account was available while
+building this. `addon.json` is modeled on Amazon's existing, well
+documented Alexa Skills Kit skill manifest format (`manifestVersion`,
+`storeListing.locales`, `privacyAndCompliance`, `mediaAssets`) with an
+`integrations` block added for the MCP endpoint, since that's the
+closest confirmed precedent for "a JSON manifest describing an Alexa
+add-on" — not a confirmed Alexa+ add-on schema.
+
+**What worked well:** Reusing a real, stable format (ASK's skill
+manifest) for everything except the new `integrations` block means most
+of the file is low-risk even if Alexa+'s add-on schema differs — store
+listing fields in particular are unlikely to have changed shape.
+
+**What didn't:** Nothing to report yet — this needs a real account to
+actually test. The `integrations` block specifically is invented and
+has no precedent to lean on.
+
+**Workaround (if any):** `apps/alexa/README.md`'s "Local development
+setup" section walks through manually entering these values into the
+console step by step, rather than assuming `addon.json` imports as-is.
+
+**Would we use it again?** Too early to say. First thing to do once
+someone on the team has Alexa+ console access: confirm whether it has a
+manifest import at all, and if so, update `addon.json` to match that
+shape exactly — the `storeListing` section should carry over easily;
+the `integrations` block is the part most likely to need rework.
+
+### [Phase 4] — mcp SDK's FastMCP introspection/call surface, still unconfirmed (B)
+
+**Tool / API / SDK:** `mcp` (the official MCP Python SDK),
+`mcp.server.fastmcp.FastMCP`
+
+**What we were trying to do:** Extend Phase 3's `haven/mcp/server.py`
+usage with a genuine protocol-level check in
+`tests/integration/test_mcp_flow.py` — calling `FastMCP.call_tool(name,
+arguments)` directly, the way a real MCP request eventually would.
+
+**What happened:** Still no network access to install the real `mcp`
+package in this environment (see the Phase 3 entry below — same root
+cause). `test_call_tool_via_fastmcp_protocol_surface` is written to
+`pytest.skip(...)` if `call_tool` doesn't exist on the installed
+`FastMCP`, or if its signature/behavior doesn't match what's assumed
+here, specifically so an SDK version mismatch can't fail the suite.
+Against the local test shim (which has no `call_tool` at all) it
+skips cleanly, as designed — confirmed, but obviously not the same as
+confirming it works against the real package.
+
+**What worked well:** Structuring every other test in the file to call
+`haven.mcp.tools.*` functions directly, through a real `AppContext` built
+from the server's own `app_lifespan`, means the suite's actual
+correctness guarantees don't depend on `call_tool` at all. That layer
+covers the full context → plan → execute → verify → recommend pipeline
+and passes regardless of this uncertainty.
+
+**What didn't:** Nothing concrete — by design, this is deferred risk,
+not a known failure.
+
+**Workaround (if any):** The skip-on-mismatch pattern in
+`test_call_tool_via_fastmcp_protocol_surface`.
+
+**Would we use it again?** Yes. First thing to check once `pip install
+-e .` succeeds with network access: run `pytest
+tests/integration/test_mcp_flow.py -v` and see whether that one test
+actually runs or skips. If it skips, read the skip reason — it'll say
+exactly what differed — and either fix the call or accept the skip and
+rely on the MCP Inspector (`apps/alexa/README.md`) for real
+protocol-level confidence instead.
+
 ### [Phase 3] — mcp SDK usage not verifiable offline (B)
 
 **Tool / API / SDK:** `mcp` (the official MCP Python SDK), specifically

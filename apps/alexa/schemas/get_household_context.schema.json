@@ -1,0 +1,177 @@
+{
+  "tool": "get_household_context",
+  "request": {
+    "title": "GetHouseholdContextRequest",
+    "type": "object",
+    "properties": {
+      "goal": {
+        "type": "string",
+        "description": "What the household is trying to do, e.g. 'get movie night ready'."
+      }
+    },
+    "required": [
+      "goal"
+    ],
+    "additionalProperties": false
+  },
+  "response": {
+    "title": "HouseholdContextSummary",
+    "type": "object",
+    "properties": {
+      "household_id": {
+        "type": "string"
+      },
+      "people": {
+        "type": "array",
+        "items": {
+          "title": "PersonSummary",
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "home": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "home"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "rooms": {
+        "type": "array",
+        "items": {
+          "title": "RoomSummary",
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "id",
+            "name"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "devices": {
+        "type": "array",
+        "items": {
+          "title": "DeviceSummary",
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "name": {
+              "type": "string"
+            },
+            "room_id": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
+            "capabilities": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "available": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "id",
+            "name",
+            "room_id",
+            "capabilities",
+            "available"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "media_options": {
+        "type": "array",
+        "items": {
+          "title": "MediaOptionSummary",
+          "type": "object",
+          "properties": {
+            "id": {
+              "type": "string"
+            },
+            "title": {
+              "type": "string"
+            },
+            "duration_minutes": {
+              "type": "integer"
+            },
+            "available": {
+              "type": "boolean"
+            }
+          },
+          "required": [
+            "id",
+            "title",
+            "duration_minutes",
+            "available"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "available_minutes": {
+        "anyOf": [
+          {
+            "type": "integer"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "preferred_room_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
+      },
+      "preferred_genres": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
+    },
+    "required": [
+      "household_id",
+      "people",
+      "rooms",
+      "devices",
+      "media_options",
+      "available_minutes",
+      "preferred_room_id",
+      "preferred_genres"
+    ],
+    "additionalProperties": false
+  }
+}

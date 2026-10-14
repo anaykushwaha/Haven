@@ -5,11 +5,16 @@ Usage:
     python scripts/run_server.py --transport stdio
     python scripts/run_server.py --host 0.0.0.0 --port 8787
 
+Host/port default to HAVEN_MCP_HOST / HAVEN_MCP_PORT when set, falling
+back to 127.0.0.1:8787; CLI flags always win over both. The env vars
+exist so a container (AgentCore, Docker) can configure binding without
+needing to override the command — see apps/alexa/README.md for the
+production values Person A's deployment sets.
+
 Alexa+ requires Streamable HTTP (the default here); `--transport stdio`
 is for local tools that speak MCP over stdio, such as the MCP Inspector,
 which is worth running against this server before pointing the Alexa+
-web simulator at it (see docs/mcp.md, once it exists — for now, the
-inspector's own README covers `npx @modelcontextprotocol/inspector`).
+web simulator at it (see apps/alexa/README.md).
 
 Requires the package to be installed (`pip install -e .`).
 """
@@ -17,13 +22,14 @@ Requires the package to be installed (`pip install -e .`).
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from collections.abc import Sequence
 
 from haven.mcp.server import create_server
 
-DEFAULT_HOST = "127.0.0.1"
-DEFAULT_PORT = 8787
+DEFAULT_HOST = os.environ.get("HAVEN_MCP_HOST", "127.0.0.1")
+DEFAULT_PORT = int(os.environ.get("HAVEN_MCP_PORT", "8787"))
 
 
 def main(argv: Sequence[str] | None = None) -> int:

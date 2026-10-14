@@ -1,0 +1,109 @@
+{
+  "tool": "execute_household_plan",
+  "request": {
+    "title": "ExecuteHouseholdPlanRequest",
+    "type": "object",
+    "properties": {
+      "plan_id": {
+        "type": "string",
+        "description": "A plan_id previously returned by propose_household_plan."
+      },
+      "confirmed": {
+        "type": "boolean",
+        "description": "Must be true for a plan that includes a high-impact step; otherwise nothing runs.",
+        "default": false
+      }
+    },
+    "required": [
+      "plan_id"
+    ],
+    "additionalProperties": false
+  },
+  "response": {
+    "title": "ExecutionSummary",
+    "type": "object",
+    "properties": {
+      "plan_id": {
+        "type": "string"
+      },
+      "goal": {
+        "type": "string"
+      },
+      "execution_status": {
+        "type": "string"
+      },
+      "verification_status": {
+        "type": "string"
+      },
+      "steps": {
+        "type": "array",
+        "items": {
+          "title": "StepExecutionSummary",
+          "type": "object",
+          "properties": {
+            "step_id": {
+              "type": "string"
+            },
+            "action": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            },
+            "detail": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "step_id",
+            "action",
+            "status",
+            "detail"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "verifications": {
+        "type": "array",
+        "items": {
+          "title": "StepVerificationSummary",
+          "type": "object",
+          "properties": {
+            "step_id": {
+              "type": "string"
+            },
+            "action": {
+              "type": "string"
+            },
+            "status": {
+              "type": "string"
+            },
+            "detail": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "step_id",
+            "action",
+            "status",
+            "detail"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "message": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "plan_id",
+      "goal",
+      "execution_status",
+      "verification_status",
+      "steps",
+      "verifications",
+      "message"
+    ],
+    "additionalProperties": false
+  }
+}

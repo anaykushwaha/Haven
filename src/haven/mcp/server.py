@@ -138,6 +138,7 @@ def build_app_context(config: HavenConfig | None = None) -> AppContext:
         "Haven MCP server starting: household_id=%s planner_backend=%s persistence_backend=%s",
         household_id,
         config.planner_backend,
+
         config.persistence_backend,
     )
 

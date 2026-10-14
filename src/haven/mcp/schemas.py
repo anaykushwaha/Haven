@@ -20,6 +20,69 @@ from haven.models.plan import Plan
 from haven.verification.verifier import StepVerification, VerificationResult, VerificationStatus
 
 # --------------------------------------------------------------------------- #
+# Request shapes
+# --------------------------------------------------------------------------- #
+#
+# The live tool functions in `haven.mcp.tools.*` keep flat, named
+# parameters (goal, plan_id, confirmed, ...) rather than accepting one of
+# these as a single argument — flat parameters map onto Alexa+ slot
+# filling far more naturally than a nested object would, and that's
+# already working, tested wiring from Phase 3. These models exist purely
+# so each tool's request shape is formally documented and exportable as
+# JSON Schema (see scripts/export_mcp_schemas.py and
+# apps/alexa/schemas/), without duplicating that shape into the tool
+# signatures themselves. If a tool's parameters change, update its
+# function signature first and this model to match — not the reverse.
+
+
+class GetHouseholdContextRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    goal: str = Field(description="What the household is trying to do, e.g. 'get movie night ready'.")
+
+
+class ProposeHouseholdPlanRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    goal: str = Field(description="What the household is trying to do.")
+
+
+class GetPlanStatusRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    plan_id: str = Field(description="A plan_id previously returned by propose_household_plan.")
+
+
+class ExecuteHouseholdPlanRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    plan_id: str = Field(description="A plan_id previously returned by propose_household_plan.")
+    confirmed: bool = Field(
+        default=False,
+        description="Must be true for a plan that includes a high-impact step; otherwise nothing runs.",
+    )
+
+
+class SaveHouseholdPreferenceRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    key: str = Field(description="Preference key, e.g. 'preferred_genres' or 'preferred_room'.")
+    value: PreferenceValue = Field(description="The value to save for this preference key.")
+    person_id: str | None = Field(
+        default=None, description="Scope the preference to one household member instead of the whole household."
+    )
+
+
+class GetActivityRecommendationsRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    goal: str | None = Field(
+        default=None,
+        description="Optional goal to steer context resolution; defaults to a general tonight recommendation.",
+    )
+
+
+# --------------------------------------------------------------------------- #
 # Household context
 # --------------------------------------------------------------------------- #
 
@@ -311,6 +374,12 @@ class RecommendationsResponse(BaseModel):
 
 
 __all__ = [
+    "GetHouseholdContextRequest",
+    "ProposeHouseholdPlanRequest",
+    "GetPlanStatusRequest",
+    "ExecuteHouseholdPlanRequest",
+    "SaveHouseholdPreferenceRequest",
+    "GetActivityRecommendationsRequest",
     "PersonSummary",
     "RoomSummary",
     "DeviceSummary",

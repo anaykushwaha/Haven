@@ -1,0 +1,61 @@
+{
+  "manifestVersion": "1.0",
+  "storeListing": {
+    "distributionCountries": ["US"],
+    "locales": {
+      "en-US": {
+        "default": "DEFAULT",
+        "name": {
+          "value": "Haven",
+          "spokenForm": { "format": "ipa", "value": "ˈheɪvən" }
+        },
+        "shortDescription": "A household agent that understands context, plans multi-step actions, and checks the result.",
+        "fullDescription": "Haven turns a stated goal like \"get movie night ready\" into a household-aware plan instead of a single device command. It checks who's home, what time is available before the next thing on the calendar, which rooms and devices are free, and any preferences it has saved, then proposes a short, explainable plan: pick something to watch that fits the time available, queue it on the right screen, and set the room's lighting for it. Nothing runs until you're ready \u2014 propose a plan, review it, then have Haven execute it. Haven checks afterward that every step actually took hold rather than assuming success, and can also suggest what to watch tonight based on saved preferences and recent activity. Built for the Amazon Developer Hackathon on Alexa+, Haven's MCP server and household/media simulators run locally or in AWS; no smart-home hub or camera is required to try it.",
+        "examplePhrases": [
+          "Get movie night ready",
+          "What should we watch tonight?",
+          "Propose a plan for movie night",
+          "Save my preferred movie genres as sci-fi and comedy"
+        ],
+        "privacyAndCompliance": {
+          "privacyPolicyUrl": "https://example.com/haven/privacy",
+          "termsOfUseUrl": "https://example.com/haven/terms"
+        },
+        "mediaAssets": {
+          "icons": {
+            "light": [
+              { "size": "72x72", "uri": "https://example.com/haven/assets/icon-light-72x72.png" },
+              { "size": "64x64", "uri": "https://example.com/haven/assets/icon-light-64x64.png" },
+              { "size": "88x88", "uri": "https://example.com/haven/assets/icon-light-88x88.png" },
+              { "size": "126x126", "uri": "https://example.com/haven/assets/icon-light-126x126.png" },
+              { "size": "180x180", "uri": "https://example.com/haven/assets/icon-light-180x180.png" },
+              { "size": "241x241", "uri": "https://example.com/haven/assets/icon-light-241x241.png" }
+            ],
+            "dark": []
+          },
+          "carouselImages": [
+            {
+              "uri": "https://example.com/haven/assets/carousel-movie-night.png",
+              "altText": "Haven's movie night plan: media selected, TV prepared, lights dimmed",
+              "size": "600x900"
+            }
+          ],
+          "bannerImages": []
+        }
+      }
+    }
+  },
+  "integrations": [
+    {
+      "type": "MCP",
+      "config": {
+        "endpoints": {
+          "default": {
+            "type": "HTTPS",
+            "uri": "https://REPLACE-WITH-YOUR-TUNNEL-OR-DEPLOYED-URL/mcp"
+          }
+        }
+      }
+    }
+  ]
+}

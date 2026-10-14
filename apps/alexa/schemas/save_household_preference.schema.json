@@ -1,0 +1,96 @@
+{
+  "tool": "save_household_preference",
+  "request": {
+    "title": "SaveHouseholdPreferenceRequest",
+    "type": "object",
+    "properties": {
+      "key": {
+        "type": "string",
+        "description": "Preference key, e.g. 'preferred_genres' or 'preferred_room'."
+      },
+      "value": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        ],
+        "description": "The value to save for this preference key."
+      },
+      "person_id": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ],
+        "description": "Scope the preference to one household member instead of the whole household."
+      }
+    },
+    "required": [
+      "key",
+      "value"
+    ],
+    "additionalProperties": false
+  },
+  "response": {
+    "title": "PreferenceSummary",
+    "type": "object",
+    "properties": {
+      "household_id": {
+        "type": "string"
+      },
+      "key": {
+        "type": "string"
+      },
+      "value": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "integer"
+          },
+          {
+            "type": "number"
+          },
+          {
+            "type": "boolean"
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "scope": {
+        "type": "string"
+      }
+    },
+    "required": [
+      "household_id",
+      "key",
+      "value",
+      "scope"
+    ],
+    "additionalProperties": false
+  }
+}
