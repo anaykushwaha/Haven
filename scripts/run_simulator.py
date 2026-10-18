@@ -10,6 +10,7 @@
 #   python scripts/run_simulator.py status
 #   python scripts/run_simulator.py rooms
 #   python scripts/run_simulator.py people
+#   python scripts/run_simulator.py devices
 #   python scripts/run_simulator.py set-presence <person_id> <home|away>
 #   python scripts/run_simulator.py set-occupied <room_id> <true|false>
 
@@ -34,6 +35,8 @@ def main(argv: list[str]) -> int:
         _print_status(service)
     elif command == "rooms":
         _print_rooms(service)
+    elif command == "devices":
+        _print_devices(service)
     elif command == "people":
         _print_people(service)
     elif command == "set-presence":
@@ -60,6 +63,12 @@ def _print_rooms(service: HouseholdSimulatorService) -> None:
         occupied = "occupied" if room.get("occupied") else "available"
 
         print(f"- {room.get('name')} [{room.get('room_id')}]: {occupied}")
+
+
+def _print_devices(service: HouseholdSimulatorService) -> None:
+    for device in service.get_devices():
+        online = "online" if device.get("online", True) else "OFFLINE"
+        print(f"- {device.get('name')} [{device.get('device_id')}]: {online} {device.get('state')}")
 
 
 def _print_people(service: HouseholdSimulatorService) -> None:

@@ -1,0 +1,68 @@
+# Person B owns lint CI: Python lint over everything (including the
+# simulators, which test.yml's ruff step does not cover) and the React
+# dashboard's type-check and production build. Offline and credential-free.
+
+name: lint
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  python:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Haven
+        run: python -m pip install --upgrade pip && pip install -e ".[dev]"
+
+      - name: Ruff
+        run: ruff check src aws simulator tests scripts
+
+      # Advisory, not blocking: fails when apps/alexa/schemas/*.schema.json no
+      # longer matches haven/mcp/schemas.py. Fix by running
+      #   python scripts/export_mcp_schemas.py
+      # and committing the result. Make this blocking once the checked-in
+      # files have been regenerated once with the project's real pydantic.
+      - name: Alexa schemas are up to date
+        continue-on-error: true
+        run: python scripts/export_mcp_schemas.py --check
+        env:
+          HAVEN_PLANNER_BACKEND: mock
+          HAVEN_PERSISTENCE_BACKEND: memory
+
+  dashboard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    defaults:
+      run:
+        working-directory: apps/dashboard
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # No lockfile is committed yet. After the first `npm install`, commit
+      # apps/dashboard/package-lock.json and switch this step to `npm ci`.
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Type-check
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build

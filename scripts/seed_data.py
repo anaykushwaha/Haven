@@ -38,29 +38,41 @@ ROOMS_DEFAULT = [
         "name": "Living Room",
         "occupied": False,
         "current_activity": None,
-        "device_ids": ["device-tv-living-room", "device-lights-living-room"],
+        "device_ids": [
+            "device-tv-living-room",
+            "device-lights-living-room",
+            "device-thermostat-living-room"
+        ]
     },
     {
         "room_id": "room-kitchen",
         "name": "Kitchen",
         "occupied": False,
         "current_activity": None,
-        "device_ids": ["device-lights-kitchen"],
+        "device_ids": [
+            "device-lights-kitchen",
+            "device-lock-back-door"
+        ]
     },
     {
         "room_id": "room-bedroom-1",
         "name": "Primary Bedroom",
         "occupied": False,
         "current_activity": None,
-        "device_ids": ["device-lights-bedroom-1"],
+        "device_ids": [
+            "device-lights-bedroom-1"
+        ]
     },
     {
         "room_id": "room-entry",
         "name": "Front Entry",
         "occupied": False,
         "current_activity": None,
-        "device_ids": ["device-lock-front-door", "device-security-system"],
-    },
+        "device_ids": [
+            "device-lock-front-door",
+            "device-security-system"
+        ]
+    }
 ]
 
 PEOPLE_DEFAULT = [
@@ -94,7 +106,10 @@ DEVICES_DEFAULT = [
         "device_type": "tv",
         "room_id": "room-living-room",
         "online": True,
-        "state": {"power": "off", "current_media_id": None},
+        "state": {
+            "power": "off",
+            "current_media_id": None
+        }
     },
     {
         "device_id": "device-lights-living-room",
@@ -102,7 +117,10 @@ DEVICES_DEFAULT = [
         "device_type": "light",
         "room_id": "room-living-room",
         "online": True,
-        "state": {"power": "on", "brightness": 80},
+        "state": {
+            "power": "on",
+            "brightness": 80
+        }
     },
     {
         "device_id": "device-lights-kitchen",
@@ -110,7 +128,10 @@ DEVICES_DEFAULT = [
         "device_type": "light",
         "room_id": "room-kitchen",
         "online": True,
-        "state": {"power": "on", "brightness": 100},
+        "state": {
+            "power": "on",
+            "brightness": 100
+        }
     },
     {
         "device_id": "device-lights-bedroom-1",
@@ -118,7 +139,23 @@ DEVICES_DEFAULT = [
         "device_type": "light",
         "room_id": "room-bedroom-1",
         "online": True,
-        "state": {"power": "off", "brightness": 0},
+        "state": {
+            "power": "off",
+            "brightness": 0
+        }
+    },
+    {
+        "device_id": "device-thermostat-living-room",
+        "name": "Living Room Thermostat",
+        "device_type": "thermostat",
+        "room_id": "room-living-room",
+        "online": True,
+        "state": {
+            "mode": "heat",
+            "away": False,
+            "target_celsius": 21.0,
+            "home_target_celsius": 21.0
+        }
     },
     {
         "device_id": "device-lock-front-door",
@@ -126,7 +163,19 @@ DEVICES_DEFAULT = [
         "device_type": "lock",
         "room_id": "room-entry",
         "online": True,
-        "state": {"locked": False},
+        "state": {
+            "locked": False
+        }
+    },
+    {
+        "device_id": "device-lock-back-door",
+        "name": "Back Door Lock",
+        "device_type": "lock",
+        "room_id": "room-kitchen",
+        "online": True,
+        "state": {
+            "locked": False
+        }
     },
     {
         "device_id": "device-security-system",
@@ -134,8 +183,11 @@ DEVICES_DEFAULT = [
         "device_type": "security_system",
         "room_id": "room-entry",
         "online": True,
-        "state": {"armed": False},
-    },
+        "state": {
+            "armed": False,
+            "mode": "disarmed"
+        }
+    }
 ]
 
 MEDIA_DEFAULT = [

@@ -7,11 +7,16 @@
 # Resolver, executor, and verifier all be developed and demoed before
 # any real device integration exists.
 
-# Phase 2 change: device records are now loaded into memory once (like
-# people and rooms already were) instead of being re-read from disk on
-# every call, and can be mutated via set_device_state(). This is what
-# lets the executor actually turn a "dim the lights" step into an
-# observable state change the verifier can check afterwards.
+# Phase 2 change: device records are loaded into memory once (like
+# people and rooms) and can be mutated via set_device_state(). This is
+# what lets the executor turn a "dim the lights" step into an observable
+# state change the verifier can check afterwards.
+#
+# Phase 5 change: the device store itself now lives in
+# simulator.security.service.SecuritySimulatorService, and the device
+# methods below delegate to it. There is exactly one in-memory copy of
+# every device, so the household view and the security view cannot
+# disagree. The public API of this class is unchanged.
 
 # The simulator intentionally mirrors the shape of a real integration
 # so that swapping it out later does not require changing callers.
@@ -26,9 +31,9 @@ from haven.models.device import Device, DeviceType
 from haven.models.household import Household
 from haven.models.person import Person, PresenceStatus
 from haven.models.room import Room
+from simulator.security.service import DEFAULT_DEVICES_PATH, SecuritySimulatorService
 
 DEFAULT_DATA_DIR = Path(__file__).parent / "data"
-DEFAULT_DEVICES_PATH = Path(__file__).parent.parent / "security" / "data" / "devices.json"
 
 
 class HouseholdSimulatorService:
@@ -40,14 +45,19 @@ class HouseholdSimulatorService:
         devices_path: Path | str = DEFAULT_DEVICES_PATH,
     ) -> None:
         self._data_dir = Path(data_dir)
-        self._devices_path = Path(devices_path)
 
         self._household: dict[str, Any] = {}
         self._people: list[dict[str, Any]] = []
         self._rooms: list[dict[str, Any]] = []
-        self._devices: list[dict[str, Any]] = []
+        self._security = SecuritySimulatorService(devices_path)
 
         self.reload()
+
+    @property
+    def security(self) -> SecuritySimulatorService:
+        # The shared device store, for the security integration
+
+        return self._security
 
     def reload(self) -> None:
         # Reloads all simulator state from disk, discarding any
@@ -56,7 +66,7 @@ class HouseholdSimulatorService:
         self._household = self._load_json(self._data_dir / "household.json")
         self._people = self._load_json(self._data_dir / "people.json")
         self._rooms = self._load_json(self._data_dir / "rooms.json")
-        self._devices = self._load_json(self._devices_path)
+        self._security.reload()
 
     @staticmethod
     def _load_json(path: Path) -> Any:
@@ -145,20 +155,17 @@ class HouseholdSimulatorService:
         raise KeyError(f"Unknown room_id: {room_id}")
 
     # -- Devices -----------------------------------------------------------
+    # Delegated to the shared device store (see the Phase 5 note above).
 
     def get_devices(self) -> list[dict[str, Any]]:
         # Returns every known device
 
-        return [dict(device) for device in self._devices]
+        return self._security.get_devices()
 
     def get_device_state(self, device_id: str) -> dict[str, Any] | None:
         # Returns a single device's record by id, if present
 
-        for device in self._devices:
-            if device.get("device_id") == device_id:
-                return dict(device)
-
-        return None
+        return self._security.get_device_state(device_id)
 
     def set_device_state(
         self,
@@ -172,21 +179,9 @@ class HouseholdSimulatorService:
         # `state` is merged into the device's existing state dict (only
         # the given keys change); `online` replaces the device's
         # reachability flag when provided. Returns the updated device
-        # record.
+        # record. Raises KeyError for an unknown device.
 
-        for device in self._devices:
-            if device.get("device_id") != device_id:
-                continue
-
-            if state:
-                device.setdefault("state", {}).update(state)
-
-            if online is not None:
-                device["online"] = online
-
-            return dict(device)
-
-        raise KeyError(f"Unknown device_id: {device_id}")
+        return self._security.set_device_state(device_id, state=state, online=online)
 
     # -- Domain snapshot -----------------------------------------------------
 
@@ -225,7 +220,7 @@ class HouseholdSimulatorService:
                 online=bool(d.get("online", True)),
                 state=dict(d.get("state", {})),
             )
-            for d in self._devices
+            for d in self._security.get_devices()
         ]
 
         return Household(

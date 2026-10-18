@@ -34,6 +34,8 @@ class StepExecutionResult(BaseModel):
     detail: str
     effect: dict[str, str | int | float | bool | None] = Field(default_factory=dict)
     error: str | None = None
+    attempts: int = Field(default=1, ge=1)
+    """How many times the step was run (more than 1 after a retry/recovery)."""
 
 
 class ExecutionStatus(StrEnum):
@@ -50,6 +52,9 @@ class ExecutionStatus(StrEnum):
 
     AWAITING_CONFIRMATION = "AWAITING_CONFIRMATION"
     """The plan requires confirmation and none was supplied; nothing ran."""
+
+    NO_ACTION = "NO_ACTION"
+    """The plan had no steps to run (e.g. it only asks a clarifying question)."""
 
 
 class ExecutionResult(BaseModel):

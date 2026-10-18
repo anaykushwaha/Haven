@@ -13,6 +13,7 @@ from mcp.server.fastmcp import Context
 
 from haven.execution.executor import execute_plan
 from haven.mcp.schemas import ExecutionSummary, execution_and_verification_to_summary
+from haven.verification.recovery import recover_plan
 from haven.verification.verifier import verify_plan
 
 
@@ -49,6 +50,17 @@ def execute_household_plan(app, plan_id: str, confirmed: bool = False) -> Execut
         stored.plan, execution_result, household=app.household, media=app.media
     )
 
+    # One bounded recovery pass: anything verification found did not take
+    # hold is run again and re-checked, so a device that silently reverted
+    # is corrected, or the mismatch is reported honestly if it is not.
+    execution_result, verification_result = recover_plan(
+        stored.plan,
+        execution_result,
+        verification_result,
+        household=app.household,
+        media=app.media,
+    )
+
     app.plans.record_execution(plan_id, execution_result, verification_result)
 
     return execution_and_verification_to_summary(stored.plan, execution_result, verification_result)
@@ -59,7 +71,7 @@ def register(mcp) -> None:
 
     @mcp.tool()
     def execute_household_plan_tool(
-        plan_id: str, confirmed: bool, ctx: Context
+        plan_id: str, ctx: Context, confirmed: bool = False
     ) -> ExecutionSummary:
         """Execute a previously proposed plan (by the plan_id returned
         from propose_household_plan) and verify the result. Set confirmed

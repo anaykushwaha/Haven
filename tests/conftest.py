@@ -12,6 +12,10 @@ from haven.models.context import (
     RoomContext,
 )
 
+# Shared simulator-backed fixtures (tests/fixtures/simulators.py), available
+# to every test in the suite.
+pytest_plugins = ["tests.fixtures.simulators"]
+
 
 @pytest.fixture
 def movie_night_context() -> HouseholdContext:

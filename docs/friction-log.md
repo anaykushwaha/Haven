@@ -32,6 +32,107 @@ Copy the template below into a new section, dated, with your initials.
 
 ## Entries
 
+### [Phase 6] — Nothing in this phase could be run against the real toolchain (B)
+
+**Tool / API / SDK:** `ruff`, `pytest` + `pytest-anyio`, the real `mcp` client, `npm`/`vite`
+
+**What we were trying to do:** Land the Phase 5/6 code with every test and
+lint rule green.
+
+**What happened:** This environment has no network, so none of those could
+be installed. Instead: (1) the Python tests ran under small local
+stand-ins for `pydantic`, `pytest` and `mcp` (type validation included, so
+passing `None` where a `str` is declared fails as it would for real);
+(2) Python lint rules (unused imports/variables, `zip(strict=)`, import
+ordering, f-strings) were checked with hand-written AST scripts, not `ruff`;
+(3) the dashboard was type-checked with `tsc` against minimal React type
+stubs and rendered with `react-dom/server` using real backend JSON, but
+never built with `vite`.
+
+**What worked well:** Everything that does not need the network is
+covered: 337 backend tests pass here, and the dashboard's data contract was
+checked against the *real* snapshot the Python code produces.
+
+**What didn't:** Four protocol-level tests in
+`tests/integration/test_mcp_flow.py` (marked `anyio`) need the real `mcp`
+client and were written to mirror Person A's passing tests in
+`test_aws_flow.py`, not run. Two older tests
+(`test_mock_planner_import_does_not_load_aws_modules`,
+`test_mock_planning_runs_offline_without_aws_modules`) spawn a clean
+subprocess and need real `pydantic`.
+
+**Workaround (if any):** None — this is the first thing to do with network
+access: `pip install -e ".[dev]" && ruff check src aws simulator tests scripts && pytest`,
+then `cd apps/dashboard && npm install && npm run build`.
+
+**Would we use it again?** Yes, but treat the first real CI run as the
+actual verification, and read any failure there as likely a small
+real-vs-stand-in difference rather than a design problem.
+
+### [Phase 5] — Clarification plans were invisible over MCP; optional tool arguments were required (B)
+
+**Tool / API / SDK:** Internal contract — `haven.mcp.schemas`, `haven.mcp.tools.*`
+
+**What we were trying to do:** Run Person A's Phase 5 planner end to end
+through the MCP tools.
+
+**What happened:** Two seams were broken. (1) The planner now answers an
+unplannable goal with a *clarification plan* (no steps) instead of
+raising, but `PlanSummary` had no field for the question, so Alexa+ would
+have received an empty plan and never asked the user anything; executing it
+reported a misleading "Nothing completed successfully". (2) `confirmed`,
+`person_id` and `goal` were declared without defaults, so a client that
+omitted them got a validation error even though the docs called them
+optional.
+
+**What worked well:** Both were caught by reading the planner's new
+behaviour against the MCP layer rather than by a failing test, then pinned
+by tests: unit/direct tests for the clarification fields and a protocol
+test asserting the optional arguments are absent from each tool's
+`required` list.
+
+**What didn't:** Nothing about the design — it was an integration gap
+between two people's phases.
+
+**Workaround (if any):** `PlanSummary.clarification_needed` /
+`clarification_prompt`, `ExecutionStatus.NO_ACTION`, and real defaults on
+the three tool parameters. `apps/alexa/schemas/propose_household_plan.schema.json`
+was regenerated; the other five schema files are unchanged.
+
+**Would we use it again?** Yes. Worth a standing rule: any change to
+`haven.models.plan` also needs a look at `haven.mcp.schemas`.
+
+### [Phase 5] — The dashboard reads household state, so its API is opt-in and read-only (B)
+
+**Tool / API / SDK:** `FastMCP.streamable_http_app()` (ASGI), `uvicorn`
+
+**What we were trying to do:** Give the React dashboard live data from the
+same process Alexa+ is driving, without adding an MCP tool (Alexa+ would
+see it) or a second copy of the household.
+
+**What happened:** `haven/mcp/dashboard.py` adds a small pure-ASGI wrapper
+that serves `GET /api/dashboard` and `GET /api/health` next to `/mcp` and
+forwards everything else (including lifespan events) untouched.
+`scripts/run_server.py --dashboard-api` starts it. It is off by default
+because the MCP port is often tunnelled to the public internet for Alexa+,
+and that endpoint exposes who is home and which doors are locked. It only
+accepts GET/HEAD.
+
+**What worked well:** No Starlette dependency, and the wrapper is tested
+with plain ASGI calls.
+
+**What didn't:** Not run against a real `uvicorn` + `streamable_http_app()`
+here. The AgentCore container does not include it (its image copies only
+`src`, `aws`, `simulator`), so the dashboard only watches a local server —
+a dashboard for the deployed runtime would need an authenticated endpoint.
+
+**Workaround (if any):** For a demo, run the server locally with
+`--dashboard-api` and point the tunnel at a *second* server started
+without it.
+
+**Would we use it again?** Yes for local demos. Do not enable it on a
+tunnelled port.
+
 ### [Phase 4] — apps/alexa/schemas/ generated with a local schema-export shim, not real pydantic (B)
 
 **Tool / API / SDK:** `pydantic` (`BaseModel.model_json_schema()`)

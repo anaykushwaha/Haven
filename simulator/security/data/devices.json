@@ -44,10 +44,33 @@
     }
   },
   {
+    "device_id": "device-thermostat-living-room",
+    "name": "Living Room Thermostat",
+    "device_type": "thermostat",
+    "room_id": "room-living-room",
+    "online": true,
+    "state": {
+      "mode": "heat",
+      "away": false,
+      "target_celsius": 21.0,
+      "home_target_celsius": 21.0
+    }
+  },
+  {
     "device_id": "device-lock-front-door",
     "name": "Front Door Lock",
     "device_type": "lock",
     "room_id": "room-entry",
+    "online": true,
+    "state": {
+      "locked": false
+    }
+  },
+  {
+    "device_id": "device-lock-back-door",
+    "name": "Back Door Lock",
+    "device_type": "lock",
+    "room_id": "room-kitchen",
     "online": true,
     "state": {
       "locked": false
@@ -60,7 +83,8 @@
     "room_id": "room-entry",
     "online": true,
     "state": {
-      "armed": false
+      "armed": false,
+      "mode": "disarmed"
     }
   }
 ]

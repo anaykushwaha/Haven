@@ -80,6 +80,16 @@ class PlanStore:
     def get(self, plan_id: str) -> StoredPlan | None:
         return self._plans.get(plan_id)
 
+    def all(self) -> list[StoredPlan]:
+        """Every stored plan, most recently proposed first."""
+
+        return list(reversed(self._plans.values()))
+
+    def latest(self) -> StoredPlan | None:
+        """The most recently proposed plan, if any."""
+
+        return next(iter(reversed(self._plans.values())), None)
+
     def record_execution(
         self,
         plan_id: str,
@@ -169,14 +179,25 @@ def reset_app_context() -> None:
     _shared_app_context = None
 
 
-@asynccontextmanager
-async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
-    """Yield the process-wide AppContext, building it on first use."""
+def get_shared_app_context() -> AppContext:
+    """Return the process-wide AppContext, building it on first use.
+
+    Used by the MCP lifespan below and by the optional dashboard API
+    (`haven.mcp.dashboard`), which must read the *same* state the MCP tools
+    mutate rather than build a second household of its own.
+    """
 
     global _shared_app_context
     if _shared_app_context is None:
         _shared_app_context = build_app_context()
-    yield _shared_app_context
+    return _shared_app_context
+
+
+@asynccontextmanager
+async def app_lifespan(server: FastMCP) -> AsyncIterator[AppContext]:
+    """Yield the process-wide AppContext, building it on first use."""
+
+    yield get_shared_app_context()
 
 
 def create_server(
@@ -231,6 +252,7 @@ __all__ = [
     "get_app",
     "app_lifespan",
     "build_app_context",
+    "get_shared_app_context",
     "reset_app_context",
     "create_server",
 ]

@@ -195,6 +195,8 @@ class PlanSummary(BaseModel):
     requires_confirmation: bool
     summary: str
     steps: list[PlanStepSummary]
+    clarification_needed: bool = False
+    clarification_prompt: str | None = None
 
 
 def plan_to_summary(plan: Plan) -> PlanSummary:
@@ -206,6 +208,8 @@ def plan_to_summary(plan: Plan) -> PlanSummary:
         status=plan.status.value,
         requires_confirmation=plan.requires_confirmation,
         summary=plan.summary,
+        clarification_needed=plan.clarification_needed,
+        clarification_prompt=plan.clarification_prompt,
         steps=[
             PlanStepSummary(
                 id=step.id,
@@ -309,22 +313,32 @@ def execution_and_verification_to_summary(
         verification_status=verification.status.value,
         steps=[step_execution_to_summary(r) for r in execution.step_results],
         verifications=[step_verification_to_summary(v) for v in verification.step_verifications],
-        message=_execution_message(execution, verification),
+        message=_execution_message(plan, execution, verification),
     )
 
 
-def _execution_message(execution: ExecutionResult, verification: VerificationResult) -> str:
+def _execution_message(plan: Plan, execution: ExecutionResult, verification: VerificationResult) -> str:
     if execution.status is ExecutionStatus.AWAITING_CONFIRMATION:
         return "This plan includes a high-impact step and needs your confirmation before it runs."
-    if execution.status is ExecutionStatus.COMPLETED and verification.status is VerificationStatus.VERIFIED:
-        return "Done — every step ran and was confirmed."
-    if execution.status is ExecutionStatus.FAILED:
-        return "Nothing completed successfully. Check the step details for what went wrong."
+    if execution.status is ExecutionStatus.NO_ACTION:
+        if plan.clarification_needed and plan.clarification_prompt:
+            return f"Nothing was run. Haven needs more information first: {plan.clarification_prompt}"
+        return "Nothing was run: this plan has no steps."
 
-    problems = [v.detail for v in verification.step_verifications if v.status.value == "MISMATCH"]
+    retried = sum(1 for r in execution.step_results if r.attempts > 1)
+    suffix = f" (Haven retried {retried} step{'s' if retried != 1 else ''}.)" if retried else ""
+
+    if execution.status is ExecutionStatus.COMPLETED and verification.status is VerificationStatus.VERIFIED:
+        return "Done — every step ran and was confirmed." + suffix
+    if execution.status is ExecutionStatus.FAILED:
+        return "Nothing completed successfully. Check the step details for what went wrong." + suffix
+
+    problems = [
+        v.detail for v in verification.step_verifications if v.status.value == "MISMATCH"
+    ] + [r.detail for r in execution.step_results if r.status.value == "FAILED"]
     if problems:
-        return "Partially done — " + " ".join(problems)
-    return "Partially done — some steps didn't complete. Check the step details."
+        return "Partially done — " + " ".join(problems) + suffix
+    return "Partially done — some steps didn't complete. Check the step details." + suffix
 
 
 # --------------------------------------------------------------------------- #

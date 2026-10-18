@@ -68,6 +68,20 @@
           ],
           "additionalProperties": false
         }
+      },
+      "clarification_needed": {
+        "type": "boolean",
+        "default": false
+      },
+      "clarification_prompt": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "null"
+          }
+        ]
       }
     },
     "required": [

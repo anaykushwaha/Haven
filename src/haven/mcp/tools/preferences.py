@@ -40,8 +40,8 @@ def register(mcp) -> None:
     def save_household_preference_tool(
         key: str,
         value: str | int | float | bool | list[str],
-        person_id: str | None,
         ctx: Context,
+        person_id: str | None = None,
     ) -> PreferenceSummary:
         """Save a durable household preference, such as preferred movie
         genres, a preferred room for media, temperature, a preferred

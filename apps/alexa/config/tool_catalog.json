@@ -19,10 +19,14 @@
       "example_utterances": [
         "get movie night ready",
         "help me get ready for movie night",
-        "plan movie night for us"
+        "plan movie night for us",
+        "we're leaving the house",
+        "we're heading out",
+        "what should we do tonight"
       ],
       "requires_confirmation": false,
-      "returns": "A plan_id, used by get_plan_status_tool and execute_household_plan_tool."
+      "returns": "A plan_id, used by get_plan_status_tool and execute_household_plan_tool. If Haven cannot plan safely it returns clarification_needed=true and a clarification_prompt to ask the user, with no steps. A plan that locks doors or arms security reports requires_confirmation=true.",
+      "workflows": ["movie night", "leaving home", "tonight planning"]
     },
     {
       "name": "get_plan_status_tool",
@@ -39,10 +43,11 @@
       "name": "execute_household_plan_tool",
       "summary": "Execute a previously proposed plan and verify the result. Set confirmed=true only after the user has explicitly agreed to a plan containing a high-impact step.",
       "parameters": ["plan_id", "confirmed"],
+      "optional_parameters": ["confirmed"],
       "example_utterances": [
         "go ahead",
         "do it",
-        "yes, confirm that",
+        "yes, lock up and arm the house",
         "start movie night"
       ],
       "requires_confirmation": "conditional — only when the plan itself reports requires_confirmation=true; Haven, not Alexa+, decides this per plan"
@@ -51,6 +56,7 @@
       "name": "save_household_preference_tool",
       "summary": "Save a durable household (or person-scoped) preference. Rejects transient state like presence or device status.",
       "parameters": ["key", "value", "person_id"],
+      "optional_parameters": ["person_id"],
       "example_utterances": [
         "we like sci-fi and comedy movies",
         "remember that I don't like horror movies",
@@ -63,6 +69,7 @@
       "name": "get_activity_recommendations_tool",
       "summary": "Suggest up to 3 things to watch tonight based on available time, saved genre preferences, and recent activity. Does not propose or execute a plan.",
       "parameters": ["goal"],
+      "optional_parameters": ["goal"],
       "example_utterances": [
         "what should we watch tonight",
         "what should we do tonight",

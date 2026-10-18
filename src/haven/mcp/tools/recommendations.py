@@ -151,7 +151,7 @@ def register(mcp) -> None:
 
     @mcp.tool()
     def get_activity_recommendations_tool(
-        goal: str | None, ctx: Context
+        ctx: Context, goal: str | None = None
     ) -> RecommendationsResponse:
         """Suggest a short list of things to watch tonight based on
         available time, saved genre preferences, and recent activity —

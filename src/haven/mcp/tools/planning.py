@@ -68,6 +68,10 @@ def get_plan_status(app, plan_id: str) -> PlanStatusSummary:
 
 
 def _status_message(stored) -> str:
+    if stored.plan.clarification_needed:
+        prompt = stored.plan.clarification_prompt or "More information is needed."
+        return f"Haven needs more information before it can plan this: {prompt}"
+
     if stored.execution is None:
         if stored.plan.requires_confirmation:
             return "Proposed and awaiting your confirmation before it can run."
