@@ -61,8 +61,12 @@ stale, and recovers on its own.
 The snapshot says who is home and which doors are locked. So the API is
 **off unless you pass `--dashboard-api`** (or set `HAVEN_DASHBOARD_API=1`),
 only answers GET/HEAD, and should never be enabled on a server whose port
-is tunnelled to the internet for Alexa+. Point the tunnel at a second
-server started without the flag.
+is tunnelled to the internet for Alexa+.
+
+The one exception is a recorded demo with the simulated household: the
+dashboard has to run in the *same process* Alexa+ drives, so the tunnel exposes
+it too. That is fine only because the household is made up — use a throwaway
+tunnel URL, stop the server afterwards, and see [`docs/demo.md`](../../docs/demo.md#demo-state-and-the-dashboards-exposure).
 
 ## Scripts
 

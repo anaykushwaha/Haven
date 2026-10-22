@@ -21,10 +21,16 @@ Everything is offline: mock planner, in-memory persistence, simulators.
 from __future__ import annotations
 
 import asyncio
+import dataclasses
+import sys
+import types
 
 import pytest
 
+from haven.config import HavenConfig
 from haven.mcp.server import (
+    PlanStore,
+    _create_plan_repository,
     app_lifespan,
     create_server,
     get_shared_app_context,
@@ -329,6 +335,157 @@ def test_proposed_plans_are_recorded_in_memory(app_context):
     records = app_context.memory.list_activity(app_context.household_id)
 
     assert any(plan.plan_id in str(r.details) or plan.plan_id in r.summary for r in records)
+
+
+# --------------------------------------------------------------------------- #
+# Retries, restarts and limits
+# --------------------------------------------------------------------------- #
+
+
+def test_a_completed_plan_is_not_run_again(app_context):
+    plan = propose_household_plan(app_context, "Get movie night ready")
+    first = execute_household_plan(app_context, plan.plan_id)
+    app_context.household.set_device_state(LIVING_ROOM_LIGHTS, state={"brightness": 100})
+
+    again = execute_household_plan(app_context, plan.plan_id)  # e.g. a client retry
+
+    assert first.message.startswith("Done")
+    assert again.message.startswith("Already done earlier")
+    assert (again.execution_status, again.verification_status) == ("COMPLETED", "VERIFIED")
+    assert _state(app_context, LIVING_ROOM_LIGHTS)["brightness"] == 100  # nothing re-actuated
+    remembered = app_context.memory.list_activity(app_context.household_id)
+    assert sum(1 for r in remembered if r.activity_type.value == "movie_night_prepared") == 1
+
+
+def test_a_partial_plan_can_be_run_again_once_the_device_is_back(app_context):
+    plan = propose_household_plan(app_context, LEAVING)
+    app_context.household.set_device_state(FRONT_DOOR, online=False)
+    partial = execute_household_plan(app_context, plan.plan_id, confirmed=True)
+    assert partial.execution_status == "PARTIAL"
+
+    app_context.household.set_device_state(FRONT_DOOR, online=True)
+    retried = execute_household_plan(app_context, plan.plan_id, confirmed=True)
+
+    assert (retried.execution_status, retried.verification_status) == ("COMPLETED", "VERIFIED")
+    assert not retried.message.startswith("Already done")
+    assert _state(app_context, FRONT_DOOR)["locked"] is True
+
+
+def test_an_unknown_plan_tells_the_client_what_to_do(app_context):
+    with pytest.raises(ValueError, match="propose the plan again"):
+        execute_household_plan(app_context, "plan-from-before-the-restart")
+    with pytest.raises(ValueError, match="propose the plan again"):
+        get_plan_status(app_context, "plan-from-before-the-restart")
+
+
+def test_the_plan_store_is_bounded():
+    store = PlanStore(max_plans=2)
+    plans = [lock_front_door_plan().model_copy(update={"id": f"plan-{i}"}) for i in range(3)]
+
+    for plan in plans:
+        store.save(plan, "household-001")
+
+    assert store.get("plan-0") is None
+    assert [s.plan.id for s in store.all()] == ["plan-2", "plan-1"]
+    with pytest.raises(ValueError, match="max_plans"):
+        PlanStore(max_plans=0)
+
+
+# --------------------------------------------------------------------------- #
+# Plans shared between server instances (the stateless AgentCore runtime)
+# --------------------------------------------------------------------------- #
+
+
+class FakePlanRepository:
+    """Stands in for DynamoDB's plan table, shared by several PlanStores."""
+
+    def __init__(self):
+        self.items = {}
+
+    def save_plan(self, plan, household_id):
+        self.items[plan.id] = (plan, household_id)
+        return plan
+
+    def get_plan(self, plan_id):
+        item = self.items.get(plan_id)
+        return None if item is None else item[0]
+
+
+class BrokenPlanRepository:
+    def save_plan(self, plan, household_id):
+        raise RuntimeError("table unreachable")
+
+    def get_plan(self, plan_id):
+        raise RuntimeError("table unreachable")
+
+
+def _instance_sharing(app, repository):
+    """A second server instance: its own PlanStore, the same household and repository."""
+
+    return dataclasses.replace(
+        app, plans=PlanStore(repository=repository, household_id=app.household_id)
+    )
+
+
+def test_a_plan_proposed_on_one_instance_runs_on_another(app_context):
+    repository = FakePlanRepository()
+    first = _instance_sharing(app_context, repository)
+    second = _instance_sharing(app_context, repository)
+
+    plan = propose_household_plan(first, LEAVING)
+    assert plan.plan_id in repository.items
+    assert second.plans.all() == []  # the second instance has never seen it
+
+    held = execute_household_plan(second, plan.plan_id)
+    done = execute_household_plan(second, plan.plan_id, confirmed=True)
+
+    assert held.execution_status == "AWAITING_CONFIRMATION"
+    assert (done.execution_status, done.verification_status) == ("COMPLETED", "VERIFIED")
+    assert _state(app_context, FRONT_DOOR)["locked"] is True
+    assert get_plan_status(second, plan.plan_id).execution_status == "COMPLETED"
+
+
+def test_a_plan_the_repository_does_not_have_is_unknown(app_context):
+    instance = _instance_sharing(app_context, FakePlanRepository())
+
+    with pytest.raises(ValueError, match="propose the plan again"):
+        execute_household_plan(instance, "plan-nobody-saved")
+
+
+def test_an_unreachable_repository_never_breaks_the_tools(app_context):
+    instance = _instance_sharing(app_context, BrokenPlanRepository())
+
+    plan = propose_household_plan(instance, "Get movie night ready")
+    result = execute_household_plan(instance, plan.plan_id)
+
+    assert result.execution_status == "COMPLETED"  # still works on this instance
+    with pytest.raises(ValueError, match="propose the plan again"):
+        get_plan_status(_instance_sharing(app_context, BrokenPlanRepository()), plan.plan_id)
+
+
+def test_a_repository_needs_a_household():
+    with pytest.raises(ValueError, match="household_id"):
+        PlanStore(repository=FakePlanRepository())
+
+
+def test_local_runs_have_no_plan_repository():
+    assert _create_plan_repository(HavenConfig(persistence_backend="memory")) is None
+
+
+def test_dynamodb_runs_use_the_plan_repository_and_degrade_when_it_is_missing(monkeypatch):
+    config = HavenConfig(persistence_backend="dynamodb")
+    repository = FakePlanRepository()
+    fake_module = types.ModuleType("aws.dynamodb.repositories")
+    fake_module.create_dynamodb_repositories = lambda: types.SimpleNamespace(plans=repository)
+    monkeypatch.setitem(sys.modules, "aws.dynamodb.repositories", fake_module)
+
+    assert _create_plan_repository(config) is repository
+
+    def unreachable():
+        raise RuntimeError("no credentials")
+
+    fake_module.create_dynamodb_repositories = unreachable
+    assert _create_plan_repository(config) is None
 
 
 # --------------------------------------------------------------------------- #

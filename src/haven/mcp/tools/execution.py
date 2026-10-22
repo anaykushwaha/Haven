@@ -12,9 +12,11 @@ from __future__ import annotations
 from mcp.server.fastmcp import Context
 
 from haven.execution.executor import execute_plan
+from haven.execution.results import ExecutionStatus
 from haven.mcp.schemas import ExecutionSummary, execution_and_verification_to_summary
+from haven.mcp.tools.planning import unknown_plan_error
 from haven.verification.recovery import recover_plan
-from haven.verification.verifier import verify_plan
+from haven.verification.verifier import VerificationStatus, verify_plan
 
 
 def execute_household_plan(app, plan_id: str, confirmed: bool = False) -> ExecutionSummary:
@@ -27,6 +29,12 @@ def execute_household_plan(app, plan_id: str, confirmed: bool = False) -> Execut
     enforced again by `execute_plan` itself — Haven never silently runs a
     high-impact action just because a client forgot to ask.
 
+    A plan that already ran to completion and was verified is not run
+    again: a client that retries after a timeout (or asks twice) gets the
+    earlier result back, so doors are not re-actuated and the same movie
+    night is not remembered twice. A plan that only partly worked, or was
+    waiting for confirmation, can be executed again.
+
     Raises `ValueError` if `plan_id` is empty or unknown to this server
     process.
     """
@@ -36,7 +44,20 @@ def execute_household_plan(app, plan_id: str, confirmed: bool = False) -> Execut
 
     stored = app.plans.get(plan_id)
     if stored is None:
-        raise ValueError(f"Unknown plan_id: {plan_id!r}")
+        raise unknown_plan_error(plan_id)
+
+    if (
+        stored.execution is not None
+        and stored.verification is not None
+        and stored.execution.status is ExecutionStatus.COMPLETED
+        and stored.verification.status is VerificationStatus.VERIFIED
+    ):
+        earlier = execution_and_verification_to_summary(
+            stored.plan, stored.execution, stored.verification
+        )
+        return earlier.model_copy(
+            update={"message": "Already done earlier — nothing was run again. " + earlier.message}
+        )
 
     execution_result = execute_plan(
         stored.plan,

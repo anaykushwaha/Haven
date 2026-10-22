@@ -32,6 +32,92 @@ Copy the template below into a new section, dated, with your initials.
 
 ## Entries
 
+### [Phase 8] — The dashboard had two bugs only a screenshot showed (B)
+
+**Tool / API / SDK:** The React dashboard (`apps/dashboard`), headless Chromium
+
+**What we were trying to do:** Produce the README and demo screenshots from the
+real dashboard components and real backend data.
+
+**What happened:** Looking at the first render found two problems that the
+type-check and the 24 render assertions had both passed: after a plan ran
+and was verified, its badge still read "Awaiting confirmation" (the
+*proposal's* status), and long rows in the Timeline overlapped their labels.
+
+**What worked well:** Rendering the real components with `react-dom/server`
+and real snapshots from `scripts/verify_demo.py --dump-snapshots` made the
+screenshots reproducible, and the same data drove the assertions.
+
+**What didn't:** Assertions on text content can't see layout or a misleading
+label. Nothing automated covers the dashboard's appearance.
+
+**Workaround (if any):** The plan header now shows what *happened* once it
+has run (execution and verification status) and the proposal status only
+before; rows wrap long text. The screenshots are rendered server-side, not
+captured from a live Vite session.
+
+**Would we use it again?** Yes. Look at the screenshots before a release; add
+browser tests if the dashboard grows.
+
+### [Phase 8] — A two-step flow on a stateless host needed shared state (B)
+
+**Tool / API / SDK:** Bedrock AgentCore Runtime (stateless HTTP), `HavenPlans`
+
+**What we were trying to do:** Make "propose a plan" and "execute it", which
+Alexa+ sends as separate requests, work on the deployed runtime.
+
+**What happened:** Plans were kept only in each server process, and the
+AgentCore runtime is stateless: a second request may reach a different
+instance or session, where the plan id would be unknown. Person A had already
+built `DynamoDBPlanRepository` (full plan payload, and IAM for it) but
+nothing used it.
+
+**What worked well:** The repository and policy already existed, so the fix
+was small: `PlanStore` writes plans through to it and reloads on a miss, and
+degrades to in-process memory if DynamoDB is unreachable. Covered by tests
+with a fake shared repository, including the failure case.
+
+**What didn't:** Not run against real DynamoDB or the deployed runtime. Only
+the *plan* is shared: a plan executed on one instance still reports as ready
+to execute on another (re-running is safe; every step is idempotent). Storing
+full plans in the cloud also stores the goal text and device ids, which
+`docs/privacy.md` now says.
+
+**Workaround (if any):** Unknown plans return "Ask Haven to propose the plan
+again." Two related fixes in the same pass: executing an already-completed,
+verified plan returns the earlier result instead of re-running it, and the
+in-process store is bounded to 200 plans.
+
+**Would we use it again?** Yes — and verify it live: with credentials, propose
+a plan, then execute it from a second connection, against the deployed runtime.
+
+### [Phase 7] — Our own docs described authentication that wasn't true (B)
+
+**Tool / API / SDK:** Cognito JWT authorizer on AgentCore; Alexa+ add-on tooling
+
+**What we were trying to do:** Write the final MCP, privacy and Alexa+ docs
+from what the code and deployment actually do.
+
+**What happened:** Reading the deployment config showed the runtime sits behind
+a Cognito `CUSTOM_JWT` authorizer, while `apps/alexa/README.md` and
+`.env.example` still said Haven had no authentication and described a
+placeholder token for a server that "would implement bearer auth" — and the
+README pointed at an "Authentication" section that did not exist.
+
+**What worked well:** Writing the privacy page claim by claim, each tied to a
+file, is what surfaced it.
+
+**What didn't:** How Alexa+ would obtain and present that Cognito token to a
+custom MCP server is still unconfirmed against a live account, so end-to-end
+Alexa+ → deployed runtime is the one unverified link.
+
+**Workaround (if any):** The Alexa docs now separate "local server: no auth"
+from "deployed runtime: Cognito JWT", say the Alexa+ token flow is an open
+question, and never put a token in the repository.
+
+**Would we use it again?** Yes — a check that docs agree with config. The first
+thing to do with an Alexa+ account is settle the token flow.
+
 ### [Phase 6] — Nothing in this phase could be run against the real toolchain (B)
 
 **Tool / API / SDK:** `ruff`, `pytest` + `pytest-anyio`, the real `mcp` client, `npm`/`vite`
@@ -245,6 +331,8 @@ exactly what differed — and either fix the call or accept the skip and
 rely on the MCP Inspector (`apps/alexa/README.md`) for real
 protocol-level confidence instead.
 
+**Status (Phase 7):** Largely resolved. `FastMCP(..., lifespan, host, port, stateless_http)` and Streamable HTTP at `/mcp` are exercised by a real MCP client in `tests/integration/test_aws_flow.py`; the `call_tool` experiment was replaced by in-process protocol tests in `tests/integration/test_mcp_flow.py`, which follow the same pattern but have not been confirmed on a real install.
+
 ### [Phase 3] — mcp SDK usage not verifiable offline (B)
 
 **Tool / API / SDK:** `mcp` (the official MCP Python SDK), specifically
@@ -290,6 +378,8 @@ nothing else touches FastMCP directly.
 **Would we use it again?** Yes, but flag this as the first thing to
 smoke-test locally before wiring up the Alexa+ web simulator (Phase 4) —
 don't assume this is 100% confirmed to work in the real environment yet.
+
+**Status (Phase 7):** Resolved for the server wiring: the lifespan pattern, tool registration and Streamable HTTP are exercised against the real SDK by `tests/integration/test_aws_flow.py`. The original note stays as a record of why it was uncertain.
 
 ### [Phase 2] — PlanStep has no structured media_id (B)
 

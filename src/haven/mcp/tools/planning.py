@@ -17,6 +17,20 @@ from haven.mcp.tools.context import build_sources
 from haven.planning.plan_service import create_household_plan
 
 
+def unknown_plan_error(plan_id: str) -> ValueError:
+    """The error for a plan id this server process has no record of.
+
+    Plans live in the server process (see `haven.mcp.server.PlanStore`), so
+    one can be missing after a restart or if another instance proposed it.
+    The message tells the client what to do about it.
+    """
+
+    return ValueError(
+        f"Unknown plan_id {plan_id!r}: Haven has no plan with that id (it may "
+        "have expired or the server restarted). Ask Haven to propose the plan again."
+    )
+
+
 def propose_household_plan(app, goal: str) -> PlanSummary:
     """Resolve context for `goal` and propose a structured, policy-checked
     plan. Raises `ValueError` for an empty goal.
@@ -51,7 +65,7 @@ def get_plan_status(app, plan_id: str) -> PlanStatusSummary:
 
     stored = app.plans.get(plan_id)
     if stored is None:
-        raise ValueError(f"Unknown plan_id: {plan_id!r}")
+        raise unknown_plan_error(plan_id)
 
     execution_status = stored.execution.status.value if stored.execution else None
     verification_status = stored.verification.status.value if stored.verification else None
@@ -104,4 +118,4 @@ def register(mcp) -> None:
         return get_plan_status(get_app(ctx), plan_id)
 
 
-__all__ = ["propose_household_plan", "get_plan_status", "register"]
+__all__ = ["propose_household_plan", "get_plan_status", "register", "unknown_plan_error"]

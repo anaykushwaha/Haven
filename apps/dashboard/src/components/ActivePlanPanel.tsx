@@ -25,8 +25,19 @@ export function ActivePlanPanel({ plan }: ActivePlanPanelProps) {
     <Panel title="Active plan" subtitle={workflowLabel(plan.workflow)} className="panel-wide">
       <p className="plan-goal">“{plan.goal}”</p>
       <div className="badges">
-        <StatusBadge status={plan.status} />
-        <StatusBadge status={plan.execution_status} fallback="Not executed" />
+        {plan.execution_status === null ? (
+          <>
+            {/* Not run yet: the proposal's own status (e.g. "Awaiting confirmation") is what matters. */}
+            <StatusBadge status={plan.status} />
+            <StatusBadge status={null} fallback="Not executed" />
+          </>
+        ) : (
+          <>
+            {/* Once it has run, the proposal status is history; show what happened. */}
+            <StatusBadge status={plan.execution_status} />
+            <StatusBadge status={plan.verification_status} fallback="Not verified" />
+          </>
+        )}
       </div>
       <p className="muted">{plan.summary}</p>
       {plan.clarification_needed && plan.clarification_prompt ? (
