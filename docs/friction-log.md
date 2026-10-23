@@ -32,175 +32,6 @@ Copy the template below into a new section, dated, with your initials.
 
 ## Entries
 
-### [2026-10-23] — `agentcore deploy` defaults to a target named `default` (A)
-
-**Tool / API / SDK:** AgentCore CLI 0.31.0 (`agentcore deploy --dry-run`)
-
-**What we were trying to do:** Preview the existing `HavenRuntime`
-deployment for the configured `dev` / `us-west-2` target.
-
-**What happened:** `agentcore deploy --dry-run` (no extra flags) failed
-immediately with `Target "default" not found in aws-targets.json`.
-`aws-targets.json` only defines `"name": "dev"`. `agentcore status`
-does report `target: dev`, but `deploy` still defaults to `default`.
-
-**What worked well:** `agentcore deploy --help` documents
-`--target <target>` with default `"default"`. Passing `--target dev`
-selects the intended account/region.
-
-**What didn't:** A project with a single non-`default` target is a
-silent footgun. The error happens before AWS credentials are even
-used, so it can be mistaken for an auth failure.
-
-**Workaround (if any):** Always pass `--target dev` for this
-repository: `agentcore deploy --dry-run --target dev` then
-`agentcore deploy --target dev`.
-
-**Would we use it again?** Yes, but name the first target `default`
-or make the CLI pick the sole configured target.
-
-### [2026-10-23] — AgentCore CodeZip cannot import `haven` (A)
-
-**Tool / API / SDK:** Amazon Bedrock AgentCore CLI, CodeZip vs Container build
-
-**What we were trying to do:** Package the existing Haven MCP server as
-an AgentCore runtime without rewriting the application.
-
-**What happened:** The CLI CodeZip packager installs dependencies at the
-zip root and copies the repository tree beside them. Python's search
-path is `/var/task`, while Haven's application package lives in
-`src/haven`, so `import haven` fails at runtime. The generated
-`app/HavenMCP` stub is not the product.
-
-**What worked well:** Switching the runtime to `build = Container` and
-using the repository-root `Dockerfile` (`pip install .`,
-`CMD ["python", "aws/agentcore/runtime.py"]`) made `haven`, `aws`, and
-`simulator` importable the same way a local editable install does.
-
-**What didn't:** CodeZip is the CLI default and looks simpler, but it
-does not match a `src/` layout. The unused generated `app/HavenMCP`
-tree is easy to mistake for the real entrypoint.
-
-**Workaround (if any):** Keep `build = Container`,
-`codeLocation = ../../..`, entrypoint `aws/agentcore/runtime.py`. Do
-not deploy the stub package.
-
-**Would we use it again?** Yes, with Container as the starting point
-for any `src/`-layout Python project.
-
-### [2026-10-23] — CUSTOM_JWT is a gateway, not application code (A)
-
-**Tool / API / SDK:** AgentCore CUSTOM_JWT + Amazon Cognito
-
-**What we were trying to do:** Put authentication in front of the
-public MCP endpoint without teaching Haven to verify JWTs itself.
-
-**What happened:** AgentCore validates the Cognito access token before
-the request reaches `aws/agentcore/runtime.py`. A missing, invalid, or
-expired `Authorization: Bearer` never enters Haven. The runtime only
-needs `requestHeaderAllowlist: ["Authorization"]` and the discovery URL
-/ allowed client id in `agentcore.json`.
-
-**What worked well:** Haven stays credential-free. Live tests read
-`HAVEN_AGENTCORE_BEARER_TOKEN` from the shell and assert 401/403 when
-it is omitted.
-
-**What didn't:** The authorizer sits outside the process, so offline
-tests can only simulate 401/403. A real token expires and cannot be
-committed. Cognito user-pool and client identifiers are easy to
-accidentally treat as secrets or, conversely, to paste into public
-narrative docs when placeholders would do.
-
-**Workaround (if any):** Keep tokens in the calling shell only. Treat
-pool/client IDs as identifiers required for deploy config, and use
-placeholders in public write-ups.
-
-**Would we use it again?** Yes. Do not reimplement JWT validation
-inside the MCP server.
-
-### [2026-10-23] — `aws login` sessions expire and block every live proof (A)
-
-**Tool / API / SDK:** AWS CLI (`aws login` / SSO-style session)
-
-**What we were trying to do:** Deploy AgentCore, call Bedrock, and
-verify DynamoDB from the same hackathon account (`haven-dev`,
-`us-west-2`).
-
-**What happened:** `aws sts get-caller-identity` returns
-`Your session has expired. Please reauthenticate using 'aws login'.`
-(`LoginRefreshRequired`). Until that is refreshed, `agentcore deploy`,
-live Bedrock, live DynamoDB, and `pytest -m aws_live` cannot run.
-`deployed-state.json` remaining `{"targets": {}}` is the honest record
-that the current configuration has not been shown to be deployed.
-
-**What worked well:** Offline tests stay green without AWS. Backend
-switches are explicit, so an expired session cannot accidentally flip
-the planner to mock inside a "production" process that was started
-with `HAVEN_PLANNER_BACKEND=bedrock`.
-
-**What didn't:** Live AWS proof is all-or-nothing once the login
-session dies. Re-auth is interactive and cannot be scripted into CI.
-
-**Workaround (if any):** `aws login --profile haven-dev`, then
-`aws sts get-caller-identity`, then resume deploy / live tests. Record
-BLOCKED rather than fabricating deployment success.
-
-**Would we use it again?** Yes, but treat session expiry as the default
-failure mode during a hackathon, not an edge case.
-
-### [2026-10-23] — MCP 2.x breaks FastMCP v1 server construction (A)
-
-**Tool / API / SDK:** official MCP Python SDK (`mcp`)
-
-**What we were trying to do:** Install Haven (`pip install -e ".[dev]"`)
-and keep the existing FastMCP v1 server
-(`create_server` → `FastMCP(..., host=, port=, stateless_http=)`).
-
-**What happened:** MCP 2 changed APIs that this codebase still calls.
-An unconstrained `mcp` install can pull 2.x and break AgentCore
-packaging and local server boot.
-
-**What worked well:** Pinning `mcp>=1.28,<2` in `pyproject.toml` keeps
-the current server, AgentCore wrapper, and integration tests aligned.
-
-**What didn't:** The SDK major version is easy to miss because the
-import path (`mcp.server.fastmcp.FastMCP`) still looks the same.
-
-**Workaround (if any):** Keep the pin. Do not migrate to MCP 2 during
-submission freeze.
-
-**Would we use it again?** Yes, with the major-version pin treated as
-part of the deploy contract.
-
-### [2026-10-23] — DynamoDB setup is an operator step, not a runtime step (A)
-
-**Tool / API / SDK:** Amazon DynamoDB + `scripts/setup_dynamodb.py`
-
-**What we were trying to do:** Give production `MemoryService` three
-tables without letting the AgentCore role create infrastructure.
-
-**What happened:** `ensure_tables` is idempotent and works when the
-caller has `haven-dynamodb-provisioning.json`. The runtime policy
-intentionally cannot `CreateTable`. If tables are missing, production
-preference/activity writes fail with `PersistenceError` rather than
-self-healing.
-
-**What worked well:** Splitting provisioning from runtime IAM, and
-keeping repositories behind `MemoryService`, so tests can use fakes
-without boto3 tables.
-
-**What didn't:** `scripts/` is not a package (`python -m
-scripts.setup_dynamodb` is the wrong invocation). The live MCP path
-records plan *history* in `HavenActivities`; full `Plan` documents in
-`HavenPlans` are implemented at the repository layer but not yet wired
-through `MemoryService`.
-
-**Workaround (if any):** `python scripts/setup_dynamodb.py` from the
-repo root after `aws login`. Treat `HavenPlans` as implemented storage,
-not as the MCP plan store.
-
-**Would we use it again?** Yes.
-
 ### [Phase 6] — Nothing in this phase could be run against the real toolchain (B)
 
 **Tool / API / SDK:** `ruff`, `pytest` + `pytest-anyio`, the real `mcp` client, `npm`/`vite`
@@ -414,6 +245,8 @@ exactly what differed — and either fix the call or accept the skip and
 rely on the MCP Inspector (`apps/alexa/README.md`) for real
 protocol-level confidence instead.
 
+**Status (Phase 7):** Largely resolved. `FastMCP(..., lifespan, host, port, stateless_http)` and Streamable HTTP at `/mcp` are exercised by a real MCP client in `tests/integration/test_aws_flow.py`; the `call_tool` experiment was replaced by in-process protocol tests in `tests/integration/test_mcp_flow.py`, which follow the same pattern but have not been confirmed on a real install.
+
 ### [Phase 3] — mcp SDK usage not verifiable offline (B)
 
 **Tool / API / SDK:** `mcp` (the official MCP Python SDK), specifically
@@ -459,6 +292,8 @@ nothing else touches FastMCP directly.
 **Would we use it again?** Yes, but flag this as the first thing to
 smoke-test locally before wiring up the Alexa+ web simulator (Phase 4) —
 don't assume this is 100% confirmed to work in the real environment yet.
+
+**Status (Phase 7):** Resolved for the server wiring: the lifespan pattern, tool registration and Streamable HTTP are exercised against the real SDK by `tests/integration/test_aws_flow.py`. The original note stays as a record of why it was uncertain.
 
 ### [Phase 2] — PlanStep has no structured media_id (B)
 

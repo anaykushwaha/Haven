@@ -23,10 +23,11 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from typing import Protocol
 
 from mcp.server.fastmcp import Context, FastMCP
 
-from haven.config import HavenConfig, get_config
+from haven.config import DYNAMODB_PERSISTENCE_BACKEND, HavenConfig, get_config
 from haven.execution.results import ExecutionResult
 from haven.integrations.calendar import CalendarService, demo_calendar
 from haven.integrations.media import MediaService
@@ -60,33 +61,95 @@ class StoredPlan:
     verification: VerificationResult | None = None
 
 
-class PlanStore:
-    """Process-local registry of plans proposed through this MCP server.
+MAX_STORED_PLANS = 200
 
-    Scoped to the server process — a real deployment would back this with
-    `aws.dynamodb`, the same way `MemoryService` will, so a plan survives
-    a restart and can be looked up across server instances. That's future
-    work; nothing in `haven.mcp.tools` depends on this being in-memory.
+
+class PlanRepository(Protocol):
+    """The slice of `aws.dynamodb.repositories.DynamoDBPlanRepository` the
+    plan store uses to survive restarts and to share plans between server
+    instances.
     """
 
-    def __init__(self) -> None:
+    def save_plan(self, plan: Plan, household_id: str) -> Plan: ...
+
+    def get_plan(self, plan_id: str) -> Plan | None: ...
+
+
+class PlanStore:
+    """Registry of plans proposed through this MCP server.
+
+    Plans are always held in the server process (newest `max_plans` kept, so
+    a long-running server cannot grow without limit). With a `repository`
+    they are *also* written through to durable storage and re-loaded on a
+    miss, so a plan proposed by one server instance — or one AgentCore
+    session, in the stateless runtime — can be confirmed and executed by
+    another. That is what the deployed runtime needs: Alexa+ makes
+    "propose" and "execute" as separate requests.
+
+    The repository is best-effort by design. If it is unreachable the tool
+    still works on this instance (a warning is logged), and a plan the
+    repository cannot find is simply unknown, which the tools report with a
+    "propose it again" message. Only the *plan* is persisted: execution and
+    verification results stay with the instance that ran it, which is safe
+    because every step is idempotent.
+    """
+
+    def __init__(
+        self,
+        max_plans: int = MAX_STORED_PLANS,
+        *,
+        repository: PlanRepository | None = None,
+        household_id: str | None = None,
+    ) -> None:
+        if max_plans < 1:
+            raise ValueError("max_plans must be at least 1")
+        if repository is not None and not household_id:
+            raise ValueError("household_id is required when a repository is given")
+        self._max_plans = max_plans
+        self._repository = repository
+        self._household_id = household_id
         self._plans: dict[str, StoredPlan] = {}
 
     def save(self, plan: Plan, household_id: str) -> StoredPlan:
-        stored = StoredPlan(plan=plan, household_id=household_id)
-        self._plans[plan.id] = stored
+        stored = self._remember(plan, household_id)
+        if self._repository is not None:
+            try:
+                self._repository.save_plan(plan, household_id)
+            except Exception:  # noqa: BLE001 - persistence must never fail the tool
+                logger.warning(
+                    "Could not persist plan %s; it is only available on this server instance.",
+                    plan.id,
+                    exc_info=True,
+                )
         return stored
 
     def get(self, plan_id: str) -> StoredPlan | None:
-        return self._plans.get(plan_id)
+        stored = self._plans.get(plan_id)
+        if stored is not None or self._repository is None:
+            return stored
+        try:
+            plan = self._repository.get_plan(plan_id)
+        except Exception:  # noqa: BLE001 - a lookup failure reads as "unknown plan"
+            logger.warning("Could not load plan %s from durable storage.", plan_id, exc_info=True)
+            return None
+        if plan is None:
+            return None
+        return self._remember(plan, self._household_id or "")
+
+    def _remember(self, plan: Plan, household_id: str) -> StoredPlan:
+        stored = StoredPlan(plan=plan, household_id=household_id)
+        self._plans[plan.id] = stored
+        while len(self._plans) > self._max_plans:
+            del self._plans[next(iter(self._plans))]
+        return stored
 
     def all(self) -> list[StoredPlan]:
-        """Every stored plan, most recently proposed first."""
+        """Every plan held by this instance, most recently proposed first."""
 
         return list(reversed(self._plans.values()))
 
     def latest(self) -> StoredPlan | None:
-        """The most recently proposed plan, if any."""
+        """The most recently proposed plan held by this instance, if any."""
 
         return next(iter(reversed(self._plans.values())), None)
 
@@ -129,6 +192,26 @@ def get_app(ctx: Context) -> AppContext:
     return ctx.request_context.lifespan_context
 
 
+def _create_plan_repository(config: HavenConfig) -> PlanRepository | None:
+    """The durable plan repository for this configuration, if there is one.
+
+    `None` for the in-memory backend (local runs). If DynamoDB is selected
+    but cannot be reached, plans fall back to this instance's memory rather
+    than stopping the server — the same degradation `PlanStore` applies on
+    every call.
+    """
+
+    if config.persistence_backend != DYNAMODB_PERSISTENCE_BACKEND:
+        return None
+    try:
+        from aws.dynamodb.repositories import create_dynamodb_repositories
+
+        return create_dynamodb_repositories().plans
+    except Exception:  # noqa: BLE001 - see docstring
+        logger.warning("Durable plan storage is unavailable; plans stay in memory.", exc_info=True)
+        return None
+
+
 def build_app_context(config: HavenConfig | None = None) -> AppContext:
     """Construct Haven's runtime dependencies for one server process."""
 
@@ -157,7 +240,10 @@ def build_app_context(config: HavenConfig | None = None) -> AppContext:
         media=media_service,
         memory=memory_service,
         calendar=calendar_service,
-        plans=PlanStore(),
+        plans=PlanStore(
+            repository=_create_plan_repository(config),
+            household_id=household_id,
+        ),
         config=config,
         household_id=household_id,
     )
@@ -246,6 +332,8 @@ def create_server(
 
 
 __all__ = [
+    "MAX_STORED_PLANS",
+    "PlanRepository",
     "AppContext",
     "PlanStore",
     "StoredPlan",

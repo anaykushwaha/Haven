@@ -163,6 +163,28 @@ In order of how early each catches a problem:
      then repeat the recommendation phrase and confirm the preference
      changed the results
 
+## Authentication
+
+Two different situations:
+
+- **Local server** (`python scripts/run_server.py`): Haven's own MCP server
+  does no authentication. That is fine on `127.0.0.1` or behind a private
+  tunnel you control, and wrong for anything else — and never turn on
+  `--dashboard-api` on a tunnelled port (see `apps/dashboard/README.md`).
+- **Deployed AgentCore runtime**: its front door is a Cognito JWT authorizer
+  (`CUSTOM_JWT`, see `aws/agentcore/config/README.md`). Every request must
+  carry `Authorization: Bearer <Cognito access token>` from the allowed
+  client, or AgentCore rejects it before Haven runs. The token is supplied
+  at run time (for tests, `HAVEN_AGENTCORE_BEARER_TOKEN` in your shell) and
+  is never stored in this repository.
+
+**Open question — confirm in the Alexa+ console:** how Alexa+ itself obtains
+and presents a Cognito token for a custom MCP integration (OAuth account
+linking, or a static credential) wasn't confirmed against a live Alexa+
+account. Until it is, treat "Alexa+ calling the deployed runtime end to end"
+as unverified, and use the in-process and AgentCore test paths in
+`docs/testing.md` as the evidence that Haven's side works.
+
 ## Required environment values
 
 Set these wherever Haven's MCP server actually runs (locally in your
@@ -189,12 +211,11 @@ never reads AWS credentials directly.
 - `addon.json`'s exact shape is modeled on the classic Alexa Skills Kit
   manifest, not confirmed as what Alexa+'s add-on tooling actually
   expects.
-- The Streamable HTTP path (`/mcp`) and the exact `mcp.server.fastmcp`
-  constructor/`call_tool` surface used in `haven/mcp/server.py` and
-  `tests/integration/test_mcp_flow.py` were built against the documented
-  pattern but not run against a real, network-installed `mcp` package in
-  this environment.
-- No authentication is configured on the MCP server yet (see
-  `config/.env.example`'s `MCP_AUTH_TOKEN` placeholder). Fine behind a
-  private tunnel for development; needs revisiting before anything
-  resembling a real deployment.
+- How Alexa+ obtains the Cognito token the deployed runtime requires
+  (see "Authentication" above) is unconfirmed.
+- The Streamable HTTP path is `/mcp` (FastMCP's default, and the path the
+  AgentCore contract uses), and Haven's server is exercised through a real
+  MCP client in `tests/integration/test_aws_flow.py`. The extra protocol
+  tests in `tests/integration/test_mcp_flow.py` follow the same pattern.
+- Haven's own server code has no authentication: local use is for a
+  private machine or tunnel only.
