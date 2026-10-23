@@ -52,13 +52,7 @@
       }
     }
   ],
-  "memories": [
-    {
-      "name": "HavenMCPMemory",
-      "eventExpiryDuration": 30,
-      "strategies": []
-    }
-  ],
+  "memories": [],
   "knowledgeBases": [],
   "credentials": [],
   "evaluators": [],

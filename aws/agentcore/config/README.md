@@ -18,6 +18,9 @@
 | Forwarded headers | `Authorization` only |
 | Target | `dev` → account `110144245769`, `us-west-2` (`../HavenRuntime/agentcore/aws-targets.json`) |
 
+Haven does **not** use AgentCore Memory. `agentcore.json` keeps
+`memories: []`. Durable household memory is `MemoryService` → DynamoDB.
+
 ## Why a container instead of CodeZip
 
 The CLI's CodeZip packager installs dependencies into the zip root and copies

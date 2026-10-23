@@ -154,6 +154,9 @@ def test_deployment_target_is_us_west_2() -> None:
 
 def test_no_credential_providers_or_secrets_in_project(project_spec: dict[str, Any]) -> None:
     assert project_spec["credentials"] == [], "Haven uses its execution role, not stored API keys"
+    assert project_spec.get("memories", []) == [], (
+        "Haven persists through MemoryService → DynamoDB, not AgentCore Memory"
+    )
     assert not SECRET_PATTERN.search(json.dumps(project_spec))
 
 
